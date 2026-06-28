@@ -36,7 +36,7 @@ export interface BookListResponse {
 export interface BookQuery {
   status?: BookStatus;
   genre?: string;
-  year?: number;
+  year?: number | null;
   format?: BookFormat;
   language?: string;
   author?: string;
@@ -81,20 +81,27 @@ export interface CreateBookPayload {
 export type UpdateBookPayload = Partial<CreateBookPayload>;
 
 export interface YearStats {
-  year: number;
+  year?: number;
+  scope?: 'all';
   books: Book[];
   keyStats: {
     totalBooks: number;
     totalPages: number;
     avgRating: number | null;
+    fiveStarCount: number;
+    ratingDistribution: Record<string, number>;
+    longestBookPages: number | null;
     avgDaysToFinish: number | null;
     longestBook: { title: string; pageCount: number } | null;
     fastestRead: { title: string; days: number } | null;
     oldestBook: { title: string; publishedYear: number } | null;
     topAuthor: string | null;
     topGenre: string | null;
+    oldestPublished: number | null;
+    newestPublished: number | null;
   };
-  goal: { target: number; achieved: number; pct: number };
+  goal?: { target: number; achieved: number; pct: number };
+  byYear?: Array<{ year: number; count: number; pages: number; avgRating: number | null }>;
   monthly: Array<{ month: number; count: number; pages: number; dominantGenre: string | null }>;
   genreBreakdown: Array<{ genre: string; count: number; pages: number; avgRating: number | null }>;
   formatBreakdown: Array<{ format: string; count: number; pages: number }>;

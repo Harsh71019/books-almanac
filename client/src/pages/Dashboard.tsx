@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { BookDetail } from '@/features/books/BookDetail';
-import { useOverview, useYearStats } from '@/lib/queries';
+import { useAllTimeStats, useOverview, useYearStats } from '@/lib/queries';
 import { useYear } from '@/features/year/YearContext';
 import { genreColor } from '@/lib/genre-colors';
 import type { Book } from '@/lib/types';
@@ -102,6 +102,61 @@ function YearDots({ books, year, onSelect }: { books: Book[]; year: number; onSe
   );
 }
 
+function AllTimeDots({ books, onSelect }: { books: Book[]; onSelect: (b: Book) => void }) {
+  const [hovered, setHovered] = useState<string | null>(null);
+  const dated = books
+    .filter(b => b.finishedAt)
+    .sort((a, b) => new Date(a.finishedAt!).getTime() - new Date(b.finishedAt!).getTime());
+  const first = dated[0]?.finishedAt ? new Date(dated[0].finishedAt).getTime() : 0;
+  const lastFinishedAt = dated[dated.length - 1]?.finishedAt;
+  const last = lastFinishedAt ? new Date(lastFinishedAt).getTime() : first + 1;
+  const span = Math.max(1, last - first);
+  const dots = dated.map(b => ({
+    book: b,
+    pct: Math.max(1.5, Math.min(98.5, ((new Date(b.finishedAt!).getTime() - first) / span) * 100)),
+  }));
+  const hovBook = dots.find(d => d.book.id === hovered);
+
+  return (
+    <div style={{ position: 'relative', height: 150 }}>
+      {hovBook && (
+        <div style={{
+          position: 'absolute', left: hovBook.pct + '%', bottom: 88, transform: 'translateX(-50%)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, pointerEvents: 'none',
+          zIndex: 8, animation: 'fadeUp .18s ease both',
+        }}>
+          <div style={{ width: 60, height: 90, borderRadius: '2px 3px 3px 2px', overflow: 'hidden', background: genreColor(hovBook.book.genres[0]), boxShadow: '0 12px 20px -8px rgba(40,24,6,.6)', position: 'relative' }}>
+            <div style={coverFillStyle(hovBook.book.coverUrl)} />
+          </div>
+          <div style={{ fontFamily: "'Newsreader', serif", fontSize: 13, lineHeight: 1.2, color: '#2c251a', maxWidth: 120, textAlign: 'center' }}>{hovBook.book.title}</div>
+        </div>
+      )}
+      <div style={{ position: 'absolute', left: 0, right: 0, top: 70, height: 2, background: 'linear-gradient(90deg,#e0d3b6,#cdbfa3 50%,#e0d3b6)' }} />
+      {dots.map(({ book, pct }) => (
+        <div
+          key={book.id}
+          onClick={() => onSelect(book)}
+          onMouseEnter={() => setHovered(book.id)}
+          onMouseLeave={() => setHovered(null)}
+          title={book.title}
+          style={{
+            position: 'absolute', left: pct + '%', top: 70,
+            transform: `translate(-50%,-50%) scale(${hovered === book.id ? 1.7 : 1})`,
+            width: 13, height: 13, borderRadius: '50%', background: genreColor(book.genres[0]),
+            border: '2px solid #ece2cf', boxShadow: hovered === book.id ? '0 6px 14px -4px rgba(60,40,15,.6)' : '0 2px 5px rgba(60,40,15,.3)',
+            cursor: 'pointer', transition: 'transform .2s cubic-bezier(.2,.8,.2,1), box-shadow .2s', zIndex: hovered === book.id ? 5 : 2,
+          }}
+        />
+      ))}
+      <div style={{ position: 'absolute', left: 0, right: 0, top: 92, display: 'flex', justifyContent: 'space-between' }}>
+        {[...new Set(dated.map(b => new Date(b.finishedAt!).getFullYear()))].map(y => (
+          <span key={y} style={{ fontSize: 9.5, letterSpacing: '.12em', color: '#bcab8a', flex: 1, textAlign: 'center' }}>{y}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ── Now Reading card ── */
 function NowReadingCard({ book, onClick }: { book: Book; onClick: () => void }) {
   const pct = book.currentPage && book.pageCount
@@ -152,14 +207,25 @@ function NowReadingCard({ book, onClick }: { book: Book; onClick: () => void }) 
 export function DashboardPage() {
   const { year } = useYear();
   const { data: overview, isLoading } = useOverview(year);
+  const { data: allTimeStats, isLoading: isAllTimeLoading } = useAllTimeStats();
   const { data: yearStats } = useYearStats(year);
   const [selected, setSelected] = useState<Book | null>(null);
   const navigate = useNavigate();
 
-  const totals = overview?.totals ?? { booksRead: 0, pagesRead: 0, avgRating: null, fiveStarCount: 0 };
+  const totals = year === null
+    ? {
+        booksRead: allTimeStats?.keyStats.totalBooks ?? 0,
+        pagesRead: allTimeStats?.keyStats.totalPages ?? 0,
+        avgRating: allTimeStats?.keyStats.avgRating ?? null,
+        fiveStarCount: allTimeStats?.keyStats.fiveStarCount ?? 0,
+      }
+    : overview?.totals ?? { booksRead: 0, pagesRead: 0, avgRating: null, fiveStarCount: 0 };
   const currentlyReading = overview?.currentlyReading ?? [];
-  const recentFinished = overview?.recentFinished ?? [];
+  const recentFinished = year === null
+    ? [...(allTimeStats?.books ?? [])].sort((a, b) => new Date(b.finishedAt ?? 0).getTime() - new Date(a.finishedAt ?? 0).getTime()).slice(0, 8)
+    : overview?.recentFinished ?? [];
   const allBooks = yearStats?.books ?? [];
+  const pageLoading = isLoading || (year === null && isAllTimeLoading);
 
   /* KPI count-up */
   const cBooks  = useCountUp(totals.booksRead);
@@ -167,28 +233,26 @@ export function DashboardPage() {
   const cAvg    = useCountUp(Math.round((totals.avgRating ?? 0) * 10));
   const cFive   = useCountUp(totals.fiveStarCount);
 
-  const topGenre = yearStats ? Object.entries(
-    yearStats.genreBreakdown.reduce((acc, g) => { acc[g.genre] = g.count; return acc; }, {} as Record<string, number>)
-  ).sort((a, b) => b[1] - a[1])[0]?.[0] : null;
+  const topGenre = yearStats?.keyStats.topGenre ?? null;
 
-  const summary = isLoading
+  const summary = pageLoading
     ? '…'
-    : `Across ${totals.booksRead} books and ${totals.pagesRead.toLocaleString()} pages${topGenre ? `, the year leaned ${topGenre.toLowerCase()}` : ''}. ${totals.fiveStarCount > 0 ? `${totals.fiveStarCount} of them earned a full five stars.` : ''}`;
+    : `Across ${totals.booksRead} books and ${totals.pagesRead.toLocaleString()} pages${topGenre ? `, ${year === null ? 'your reading' : 'the year'} leaned ${topGenre.toLowerCase()}` : ''}. ${totals.fiveStarCount > 0 ? `${totals.fiveStarCount} of them earned a full five stars.` : ''}`;
 
   return (
     <AppShell>
-      <section style={{ padding: 'clamp(40px,5vw,64px) clamp(28px,6vw,72px) 80px', maxWidth: 1180, animation: 'fadeUp .5s ease both' }}>
+      <section className="page-pad" style={{ maxWidth: 1180, animation: 'fadeUp .5s ease both' }}>
 
         {/* eyebrow */}
         <div style={{ fontSize: 11, letterSpacing: '.34em', textTransform: 'uppercase', color: '#b15539', marginBottom: 18 }}>
-          A Year in Reading
+          {year === null ? 'Your Reading Life' : 'A Year in Reading'}
         </div>
 
         {/* heading row + now reading */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 48, alignItems: 'center', marginBottom: 56 }}>
           <div style={{ flex: '1 1 380px', minWidth: 0 }}>
             <h1 style={{ fontFamily: "'Newsreader', serif", fontWeight: 400, fontSize: 'clamp(44px,5.2vw,74px)', lineHeight: .98, letterSpacing: '-.02em', marginBottom: 24, color: '#221b13' }}>
-              {year}, <span style={{ fontStyle: 'italic', color: '#3a4d57' }}>in books.</span>
+              {year ?? 'All time'}, <span style={{ fontStyle: 'italic', color: '#3a4d57' }}>in books.</span>
             </h1>
             <p style={{ fontFamily: "'Newsreader', serif", fontSize: 21, lineHeight: 1.5, color: '#544a39', maxWidth: 560 }}>
               {summary}
@@ -201,8 +265,8 @@ export function DashboardPage() {
         </div>
 
         {/* KPIs */}
-        {!isLoading && (
-          <div style={{ display: 'flex', gap: 54, marginBottom: 58, flexWrap: 'wrap' }}>
+        {!pageLoading && (
+          <div style={{ display: 'flex', gap: 'clamp(24px,5vw,54px)', marginBottom: 58, flexWrap: 'wrap' }}>
             <KpiCell display={String(cBooks)}        label="Books finished" />
             <KpiCell display={cPages.toLocaleString()} label="Pages read" />
             <KpiCell display={(cAvg / 10).toFixed(1)} label="Avg. rating" />
@@ -217,7 +281,11 @@ export function DashboardPage() {
               <h2 style={{ fontFamily: "'Newsreader', serif", fontStyle: 'italic', fontWeight: 400, fontSize: 25, color: '#3a3327', margin: 0 }}>The year in dots</h2>
               <span style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: '#a99c83' }}>Every book, by the day you finished it</span>
             </div>
-            <YearDots books={allBooks} year={year} onSelect={setSelected} />
+            {year === null ? (
+              <AllTimeDots books={allBooks} onSelect={setSelected} />
+            ) : (
+              <YearDots books={allBooks} year={year} onSelect={setSelected} />
+            )}
           </div>
         )}
 
@@ -239,7 +307,7 @@ export function DashboardPage() {
         )}
 
         {/* Empty state */}
-        {totals.booksRead === 0 && !isLoading && (
+        {totals.booksRead === 0 && !pageLoading && (
           <div style={{ textAlign: 'center', padding: '60px 0' }}>
             <div style={{ fontFamily: "'Newsreader', serif", fontSize: 42, fontWeight: 400, color: '#221b13', marginBottom: 16 }}>Start your shelf.</div>
             <p style={{ fontSize: 17, color: '#7a6e58', marginBottom: 32 }}>Add your first book to begin tracking your reading life.</p>
@@ -253,7 +321,7 @@ export function DashboardPage() {
         )}
 
         {/* Loading */}
-        {isLoading && (
+        {pageLoading && (
           <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 60 }}>
             <span style={{ width: 22, height: 22, border: '2px solid #d3c3a1', borderTopColor: '#b15539', borderRadius: '50%', display: 'inline-block', animation: 'spin .8s linear infinite' }} />
           </div>
@@ -268,7 +336,7 @@ export function DashboardPage() {
 function KpiCell({ display, label }: { display: string; label: string }) {
   return (
     <div>
-      <div style={{ fontFamily: "'Newsreader', serif", fontSize: 52, lineHeight: 1, fontWeight: 500, color: '#221b13' }}>{display}</div>
+      <div style={{ fontFamily: "'Newsreader', serif", fontSize: 'clamp(36px,5vw,52px)', lineHeight: 1, fontWeight: 500, color: '#221b13' }}>{display}</div>
       <div style={{ fontSize: 11, letterSpacing: '.2em', textTransform: 'uppercase', color: '#9a8a6c', marginTop: 8 }}>{label}</div>
     </div>
   );

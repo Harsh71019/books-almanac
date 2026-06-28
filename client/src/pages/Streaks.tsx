@@ -142,13 +142,13 @@ function LogTodayCard({ dailyGoal = 30 }: { dailyGoal?: number }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ background: '#f4ecdc', border: '1px solid #ddcfb0', borderRadius: 14, padding: '32px 36px' }}>
+    <form onSubmit={handleSubmit} style={{ background: '#f4ecdc', border: '1px solid #ddcfb0', borderRadius: 14, padding: 'clamp(20px,4vw,36px) clamp(16px,4vw,36px)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 22 }}>
         <div style={{ fontFamily: "'Newsreader', serif", fontStyle: 'italic', fontSize: 22, color: '#3a3327' }}>Log today's reading</div>
         <div style={{ fontSize: 12, color: '#9a8a6c' }}>Goal · {dailyGoal} pages/day</div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 30 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
         {/* Ring */}
         <div style={ringStyle}>
           <div style={{ position: 'absolute', inset: 11, borderRadius: '50%', background: '#f4ecdc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
@@ -221,7 +221,7 @@ function RecentSessions() {
 export function StreaksPage() {
   const { data, isLoading } = useStreaks();
   const { year: contextYear } = useYear();
-  const [calYear, setCalYear] = useState(contextYear);
+  const [calYear, setCalYear] = useState(contextYear ?? new Date().getFullYear());
 
   const ss = data ?? { currentStreak: 0, longestStreak: 0, totalReadingDays: 0, totalPagesLogged: 0, calendar: [] };
   const streakHeadline = ss.currentStreak === 0 ? 'Start a new streak today' : ss.currentStreak >= 7 ? "You're on fire" : 'Keep it going';
@@ -231,14 +231,14 @@ export function StreaksPage() {
 
   return (
     <AppShell>
-      <section style={{ padding: 'clamp(40px,5vw,64px) clamp(28px,6vw,72px) 90px', maxWidth: 1180, animation: 'fadeUp .5s ease both' }}>
+      <section className="page-pad" style={{ maxWidth: 1180, animation: 'fadeUp .5s ease both' }}>
         <div style={{ fontSize: 11, letterSpacing: '.34em', textTransform: 'uppercase', color: '#b15539', marginBottom: 16 }}>Your reading habit</div>
-        <h1 style={{ fontFamily: "'Newsreader', serif", fontWeight: 400, fontSize: 60, letterSpacing: '-.02em', lineHeight: 1, marginBottom: 50, color: '#221b13' }}>Day by day, page by page.</h1>
+        <h1 style={{ fontFamily: "'Newsreader', serif", fontWeight: 400, fontSize: 'clamp(36px,6vw,60px)', letterSpacing: '-.02em', lineHeight: 1.05, marginBottom: 40, color: '#221b13' }}>Day by day, page by page.</h1>
 
         {/* Top cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.15fr', gap: 30, marginBottom: 44 }}>
+        <div className="grid-cols-1-md-2" style={{ marginBottom: 44 }}>
           {/* Streak card */}
-          <div style={{ background: 'linear-gradient(155deg,#241d14,#3a2f22)', color: '#efe3cc', borderRadius: 14, padding: '36px 38px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 30px 50px -30px rgba(40,24,6,.6)' }}>
+          <div style={{ background: 'linear-gradient(155deg,#241d14,#3a2f22)', color: '#efe3cc', borderRadius: 14, padding: 'clamp(24px,4vw,38px) clamp(20px,4vw,38px)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 30px 50px -30px rgba(40,24,6,.6)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <div style={{ fontSize: 10.5, letterSpacing: '.28em', textTransform: 'uppercase', color: '#caa86f' }}>Current streak</div>
@@ -274,7 +274,7 @@ export function StreaksPage() {
         </div>
 
         {/* Calendar heatmap */}
-        <div style={{ background: '#f4ecdc', border: '1px solid #ddcfb0', borderRadius: 14, padding: '32px 36px 30px', marginBottom: 44 }}>
+        <div style={{ background: '#f4ecdc', border: '1px solid #ddcfb0', borderRadius: 14, padding: 'clamp(20px,4vw,36px) clamp(16px,4vw,36px) clamp(20px,4vw,30px)', marginBottom: 44 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 14 }}>
             <div style={{ fontFamily: "'Newsreader', serif", fontStyle: 'italic', fontSize: 22, color: '#3a3327' }}>The year at a glance</div>
             <div style={{ display: 'flex', gap: 7 }}>
@@ -295,7 +295,7 @@ export function StreaksPage() {
         </div>
 
         {/* Recent sessions */}
-        <div style={{ background: '#f4ecdc', border: '1px solid #ddcfb0', borderRadius: 14, padding: '32px 36px' }}>
+        <div style={{ background: '#f4ecdc', border: '1px solid #ddcfb0', borderRadius: 14, padding: 'clamp(20px,4vw,36px) clamp(16px,4vw,36px)' }}>
           <div style={{ fontFamily: "'Newsreader', serif", fontStyle: 'italic', fontSize: 22, color: '#3a3327', marginBottom: 24 }}>Recent sessions</div>
           <RecentSessions />
         </div>

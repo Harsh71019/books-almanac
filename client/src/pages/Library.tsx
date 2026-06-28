@@ -2,10 +2,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { BookDetail } from '@/features/books/BookDetail';
-import { useBooks, useYears } from '@/lib/queries';
+import { useBookYears, useBooks } from '@/lib/queries';
 import { useYear } from '@/features/year/YearContext';
 import { genreColor } from '@/lib/genre-colors';
-import type { Book, BookQuery, BookStatus, BookFormat } from '@/lib/types';
+import type { Book, BookQuery, BookStatus } from '@/lib/types';
 
 /* ── helpers ── */
 function coverFill(url: string | null) {
@@ -35,15 +35,16 @@ const TAB = { padding: '9px 22px', border: 'none', borderRadius: 24, cursor: 'po
 
 /* ── Spine shelf view ── */
 function SpineView({ books, onSelect }: { books: Book[]; onSelect: (b: Book) => void }) {
-  const PER_SHELF = 14;
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const PER_SHELF = isMobile ? 7 : 14;
   const shelves: Book[][] = [];
   for (let i = 0; i < books.length; i += PER_SHELF) shelves.push(books.slice(i, i + PER_SHELF));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {shelves.map((shelf, si) => (
-        <div key={si} style={{ position: 'relative', padding: '0 18px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, minHeight: 188, position: 'relative', zIndex: 2 }}>
+        <div key={si} style={{ position: 'relative', padding: '0 18px 16px', overflowX: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, minHeight: 188, position: 'relative', zIndex: 2, minWidth: 'max-content' }}>
             {shelf.map(book => {
               const { w, h } = spineGeom(book);
               const color = genreColor(book.genres[0]);
@@ -279,7 +280,7 @@ export function LibraryPage() {
   const { year: contextYear, setYear: setContextYear } = useYear();
   const [view, setView] = useState<'spine' | 'cover' | 'flow'>('spine');
   const [selected, setSelected] = useState<Book | null>(null);
-  const [query, setQuery] = useState<BookQuery>({ sort: 'recently_finished', page: 1, limit: 200, year: contextYear });
+  const [query, setQuery] = useState<BookQuery>({ sort: 'recently_finished', page: 1, limit: 100, year: contextYear });
   const [search, setSearch] = useState('');
   const [searchDebounced, setSearchDebounced] = useState('');
   const navigate = useNavigate();
@@ -289,10 +290,10 @@ export function LibraryPage() {
   }, [contextYear]);
 
   const { data, isLoading } = useBooks({ ...query, q: searchDebounced || undefined });
-  const { data: years } = useYears();
+  const { data: years } = useBookYears();
   const set = (patch: Partial<BookQuery>) => {
     if ('year' in patch && patch.year !== contextYear) {
-      setContextYear(patch.year ?? new Date().getFullYear());
+      setContextYear(patch.year ?? null);
     }
     setQuery(q => ({ ...q, ...patch, page: 1 }));
   };
@@ -308,35 +309,35 @@ export function LibraryPage() {
 
   return (
     <AppShell>
-      <section style={{ padding: '54px 64px 90px', animation: 'fadeUp .5s ease both' }}>
+      <section className="page-pad" style={{ animation: 'fadeUp .5s ease both' }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 40, flexWrap: 'wrap', gap: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 40, flexWrap: 'wrap', gap: 16 }}>
           <div>
             <div style={{ fontSize: 11, letterSpacing: '.34em', textTransform: 'uppercase', color: '#b15539', marginBottom: 14 }}>The Wall · {contextYear}</div>
-            <h1 style={{ fontFamily: "'Newsreader', serif", fontWeight: 400, fontSize: 46, letterSpacing: '-.015em', lineHeight: 1, margin: 0, color: '#221b13' }}>
+            <h1 style={{ fontFamily: "'Newsreader', serif", fontWeight: 400, fontSize: 'clamp(28px,5vw,46px)', letterSpacing: '-.015em', lineHeight: 1, margin: 0, color: '#221b13' }}>
               {data?.total ?? '…'} spines, end to end
             </h1>
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
             {/* View switcher */}
             <div style={{ display: 'flex', background: '#e3d6bb', border: '1px solid #d3c3a1', borderRadius: 30, padding: 4, gap: 0 }}>
               <button onClick={() => setView('spine')} style={tabStyle(view === 'spine')}>Spines</button>
               <button onClick={() => setView('cover')} style={tabStyle(view === 'cover')}>Covers</button>
-              <button onClick={() => setView('flow')}  style={tabStyle(view === 'flow')}>Cover Flow</button>
+              <button onClick={() => setView('flow')}  style={tabStyle(view === 'flow')}>Flow</button>
             </div>
-            <button onClick={() => navigate('/add')} style={{ padding: '10px 22px', border: 'none', borderRadius: 9, background: '#221b13', color: '#f3ecdf', fontFamily: "'Spline Sans'", fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
-              + Add book
+            <button onClick={() => navigate('/add')} style={{ padding: '10px 18px', border: 'none', borderRadius: 9, background: '#221b13', color: '#f3ecdf', fontFamily: "'Spline Sans'", fontSize: 14, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              + Add
             </button>
           </div>
         </div>
 
         {/* Filters */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 36, padding: '16px 0', borderTop: '1px solid #e0d3b6', borderBottom: '1px solid #e0d3b6' }}>
-          <div style={{ display: 'flex', gap: 6 }}>
+        <div className="filter-bar" style={{ marginBottom: 36, padding: '16px 0', borderTop: '1px solid #e0d3b6', borderBottom: '1px solid #e0d3b6' }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {STATUS_OPTS.map(({ value, label }) => {
               const active = (query.status ?? '') === value;
               return (
-                <button key={value} onClick={() => set({ status: value as BookStatus | undefined })}
+                <button key={value} onClick={() => set({ status: value ? value as BookStatus : undefined })}
                   style={{ ...inputStyle, background: active ? '#221b13' : '#f6efe1', color: active ? '#f3ecdf' : '#7a6e58', borderColor: active ? '#221b13' : '#d3c3a1', cursor: 'pointer' }}>
                   {label}
                 </button>
@@ -344,18 +345,18 @@ export function LibraryPage() {
             })}
           </div>
 
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div className="filter-bar-right">
             <select value={query.sort ?? 'recently_finished'} onChange={e => set({ sort: e.target.value as BookQuery['sort'] })} style={inputStyle}>
               {SORT_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-            <select value={query.year ?? ''} onChange={e => set({ year: e.target.value ? Number(e.target.value) : undefined })} style={inputStyle}>
+            <select value={query.year ?? ''} onChange={e => set({ year: e.target.value ? Number(e.target.value) : null })} style={inputStyle}>
               <option value="">All years</option>
               {years?.map(({ year }) => <option key={year} value={year}>{year}</option>)}
             </select>
             <input
               value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search…"
-              style={{ ...inputStyle, width: 180 }}
+              style={{ ...inputStyle, width: 'clamp(120px, 20vw, 180px)' }}
             />
           </div>
         </div>

@@ -38,9 +38,9 @@ export function SettingsPage() {
 
   return (
     <AppShell>
-      <section style={{ padding: 'clamp(40px,5vw,64px) clamp(28px,6vw,72px) 80px', maxWidth: 680, animation: 'fadeUp .5s ease both' }}>
+      <section className="page-pad-sm" style={{ maxWidth: 680, animation: 'fadeUp .5s ease both' }}>
         <div style={{ fontSize: 11, letterSpacing: '.34em', textTransform: 'uppercase', color: '#b15539', marginBottom: 16 }}>Preferences</div>
-        <h1 style={{ fontFamily: "'Newsreader', serif", fontWeight: 400, fontSize: 52, letterSpacing: '-.02em', lineHeight: 1, marginBottom: 48, color: '#221b13' }}>Settings</h1>
+        <h1 style={{ fontFamily: "'Newsreader', serif", fontWeight: 400, fontSize: 'clamp(32px,5vw,52px)', letterSpacing: '-.02em', lineHeight: 1, marginBottom: 32, color: '#221b13' }}>Settings</h1>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 

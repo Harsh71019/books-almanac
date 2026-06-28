@@ -72,6 +72,27 @@ export class BooksService {
     };
   }
 
+  async years() {
+    return this.bookModel.aggregate([
+      {
+        $project: {
+          displayDate: { $ifNull: ['$finishedAt', { $ifNull: ['$startedAt', '$createdAt'] }] },
+          pageCount: 1
+        }
+      },
+      { $match: { displayDate: { $ne: null } } },
+      {
+        $group: {
+          _id: { $year: '$displayDate' },
+          count: { $sum: 1 },
+          pages: { $sum: { $ifNull: ['$pageCount', 0] } }
+        }
+      },
+      { $sort: { _id: -1 } },
+      { $project: { _id: 0, year: '$_id', count: 1, pages: 1 } }
+    ]);
+  }
+
   toResponse(book: Partial<Book> & { _id?: unknown; createdAt?: Date; updatedAt?: Date }) {
     return {
       id: String(book._id),
@@ -106,10 +127,13 @@ export class BooksService {
     if (query.author) filter.authors = { $regex: query.author, $options: 'i' };
     if (query.q) filter.$text = { $search: query.q };
     if (query.year) {
-      filter.finishedAt = {
-        $gte: startOfYear(query.year),
-        $lt: startOfNextYear(query.year)
-      };
+      const start = startOfYear(query.year);
+      const end = startOfNextYear(query.year);
+      filter.$or = [
+        { finishedAt: { $gte: start, $lt: end } },
+        { finishedAt: null, startedAt: { $gte: start, $lt: end } },
+        { finishedAt: null, startedAt: null, createdAt: { $gte: start, $lt: end } }
+      ];
     }
     return filter;
   }

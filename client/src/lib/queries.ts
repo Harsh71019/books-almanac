@@ -29,7 +29,11 @@ export function useCreateBook() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload: CreateBookPayload) => api.post<Book>('/books', payload),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['books'] })
+    onSuccess: (book) => {
+      qc.setQueryData(['book', book.id], book);
+      qc.invalidateQueries({ queryKey: ['books'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+    }
   });
 }
 
@@ -80,9 +84,9 @@ export function useMetaSearch(q: string) {
 
 /* ── Stats ── */
 
-export function useOverview(year?: number) {
+export function useOverview(year?: number | null) {
   return useQuery<Overview>({
-    queryKey: ['stats', 'overview', year],
+    queryKey: ['stats', 'overview', year ?? null],
     queryFn: () => api.get(`/stats/overview${year ? `?year=${year}` : ''}`),
     staleTime: 2 * 60_000
   });
@@ -96,10 +100,26 @@ export function useYears() {
   });
 }
 
-export function useYearStats(year: number) {
+export function useBookYears() {
+  return useQuery<Array<{ year: number; count: number; pages: number }>>({
+    queryKey: ['books', 'years'],
+    queryFn: () => api.get('/books/years'),
+    staleTime: 5 * 60_000
+  });
+}
+
+export function useYearStats(year: number | null) {
   return useQuery<YearStats>({
-    queryKey: ['stats', 'year', year],
-    queryFn: () => api.get(`/stats/year/${year}`),
+    queryKey: ['stats', year === null ? 'all' : 'year', year],
+    queryFn: () => year === null ? api.get('/stats/all') : api.get(`/stats/year/${year}`),
+    staleTime: 2 * 60_000
+  });
+}
+
+export function useAllTimeStats() {
+  return useQuery<YearStats>({
+    queryKey: ['stats', 'all'],
+    queryFn: () => api.get('/stats/all'),
     staleTime: 2 * 60_000
   });
 }

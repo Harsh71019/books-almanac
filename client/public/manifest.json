@@ -1,0 +1,27 @@
+{
+  "name": "Shelf — Reading Log",
+  "short_name": "Shelf",
+  "description": "Your personal reading almanac. Track books, streaks, and stats.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#221b13",
+  "theme_color": "#221b13",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["books", "lifestyle", "productivity"]
+}

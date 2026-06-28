@@ -16,6 +16,11 @@ export class StatsController {
     return this.statsService.years();
   }
 
+  @Get('all')
+  allTime() {
+    return this.statsService.allTime();
+  }
+
   @Get('year/:year')
   year(@Param() params: YearParamDto) {
     return this.statsService.year(params.year);

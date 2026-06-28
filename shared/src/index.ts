@@ -209,7 +209,7 @@ export const bookQuerySchema = z.object({
     .enum(['recently_finished', 'rating', 'page_count', 'title', 'date_added'])
     .default('recently_finished'),
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(24)
+  limit: z.coerce.number().int().min(1).max(500).default(24)
 });
 
 export const metaSearchQuerySchema = z.object({

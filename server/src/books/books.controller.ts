@@ -25,6 +25,11 @@ export class BooksController {
     res.send(JSON.stringify(data, null, 2));
   }
 
+  @Get('years')
+  years() {
+    return this.booksService.years();
+  }
+
   @Get(':id')
   findOne(@Param() params: ObjectIdParamDto) {
     return this.booksService.findOne(params.id);

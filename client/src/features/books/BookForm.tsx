@@ -11,7 +11,7 @@ import type { Book, BookFormat, BookStatus, BookSource, CreateBookPayload, MetaC
 interface BookFormProps {
   book?: Book;
   initialCandidate?: MetaCandidate;
-  onClose: () => void;
+  onClose: (savedBook?: Book) => void;
 }
 
 type FormState = {
@@ -144,12 +144,13 @@ export function BookForm({ book, initialCandidate, onClose }: BookFormProps) {
     if (!form.title.trim()) { setError('Title is required.'); return; }
     setError('');
     try {
+      let savedBook: Book;
       if (book) {
-        await update.mutateAsync({ id: book.id, payload: toPayload() });
+        savedBook = await update.mutateAsync({ id: book.id, payload: toPayload() });
       } else {
-        await create.mutateAsync(toPayload());
+        savedBook = await create.mutateAsync(toPayload());
       }
-      onClose();
+      onClose(savedBook);
     } catch {
       setError('Something went wrong. Please try again.');
     }
@@ -304,7 +305,7 @@ export function BookForm({ book, initialCandidate, onClose }: BookFormProps) {
       {error && <p className="text-sm text-red-400">{error}</p>}
 
       <div className="flex justify-end gap-2 pt-2 border-t border-[var(--line)]">
-        <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button type="button" variant="ghost" onClick={() => onClose()}>Cancel</Button>
         <Button type="submit" loading={busy}>{book ? 'Save changes' : 'Add book'}</Button>
       </div>
     </form>

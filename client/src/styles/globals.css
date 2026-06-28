@@ -46,3 +46,61 @@ textarea::placeholder { color: #a99c83; }
   70%  { box-shadow: 0 0 0 7px rgba(217,138,90,0)   }
   100% { box-shadow: 0 0 0 0   rgba(217,138,90,0)   }
 }
+
+/* ── Safe area (iOS notch / home bar) ── */
+.safe-bottom {
+  padding-bottom: max(4rem, env(safe-area-inset-bottom, 4rem));
+}
+
+/* ── Responsive page padding ── */
+.page-pad {
+  padding: 20px 16px 100px; /* extra bottom for floating nav */
+}
+.page-pad-sm {
+  padding: 20px 16px 100px;
+}
+@media (min-width: 768px) {
+  .page-pad  { padding: clamp(40px,5vw,64px) clamp(28px,6vw,64px) clamp(80px,10vw,90px); }
+  .page-pad-sm { padding: clamp(40px,5vw,64px) clamp(28px,6vw,64px) clamp(60px,8vw,80px); }
+}
+
+/* ── Responsive grid: 2-col on md+, 1-col on mobile ── */
+.grid-cols-1-md-2 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+@media (min-width: 768px) {
+  .grid-cols-1-md-2 {
+    grid-template-columns: 1fr 1.15fr;
+    gap: 30px;
+  }
+}
+
+/* ── Library filter bar: wrap nicely on mobile ── */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.filter-bar-right {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (min-width: 768px) {
+  .filter-bar-right {
+    margin-left: auto;
+  }
+}
+
+/* ── AddBook: hide hero panel on mobile ── */
+.add-book-hero {
+  display: none;
+}
+@media (min-width: 768px) {
+  .add-book-hero {
+    display: flex;
+  }
+}

@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { BookForm } from '@/features/books/BookForm';
-import { useMetaSearch, useCreateBook, useUploadCover } from '@/lib/queries';
+import { useYear } from '@/features/year/YearContext';
+import { useMetaSearch } from '@/lib/queries';
 import { genreColor } from '@/lib/genre-colors';
-import type { MetaCandidate } from '@/lib/types';
+import type { Book, MetaCandidate } from '@/lib/types';
 
 /* ── Search step ── */
 function SearchStep({ onPick, onManual }: { onPick: (c: MetaCandidate) => void; onManual: () => void }) {
@@ -25,15 +26,15 @@ function SearchStep({ onPick, onManual }: { onPick: (c: MetaCandidate) => void; 
         Type a title, author, or ISBN. Cover art and metadata are pulled automatically.
       </p>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
         <input
           value={q}
           onChange={e => setQ(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && run()}
           placeholder="e.g. Piranesi, or 9781635575637"
-          style={{ flex: 1, fontFamily: "'Newsreader', serif", fontSize: 20, padding: '18px 22px', border: '1px solid #d3c3a1', borderRadius: 8, background: '#f6efe1', color: '#221b13', outline: 'none' }}
+          style={{ flex: '1 1 200px', fontFamily: "'Newsreader', serif", fontSize: 'clamp(16px,3vw,20px)', padding: '14px 18px', border: '1px solid #d3c3a1', borderRadius: 8, background: '#f6efe1', color: '#221b13', outline: 'none' }}
         />
-        <button onClick={run} style={{ padding: '0 30px', border: 'none', borderRadius: 8, background: '#b15539', color: '#f6efe1', fontFamily: "'Spline Sans'", fontSize: 14, letterSpacing: '.04em', cursor: 'pointer', fontWeight: 500 }}>Fetch</button>
+        <button onClick={run} style={{ padding: '0 26px', border: 'none', borderRadius: 8, background: '#b15539', color: '#f6efe1', fontFamily: "'Spline Sans'", fontSize: 14, letterSpacing: '.04em', cursor: 'pointer', fontWeight: 500, minHeight: 52 }}>Fetch</button>
       </div>
 
       <div style={{ fontSize: 12.5, color: '#9a8a6c', marginBottom: 40 }}>
@@ -93,7 +94,7 @@ function BookHero({ coverUrl, spineColor, title, author, step }: { coverUrl: str
   const isBook = step !== 'search';
 
   return (
-    <div style={{ flex: '0 0 42%', maxWidth: 520, position: 'sticky', top: 0, alignSelf: 'flex-start', height: '100vh', background: 'radial-gradient(120% 80% at 30% 16%, #efe4cd 0%, #e4d7ba 60%, #d9c9a6 100%)', borderRight: '1px solid #d8cbac', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '56px 48px', overflow: 'hidden' }}>
+    <div className="add-book-hero" style={{ flex: '0 0 42%', maxWidth: 520, position: 'sticky', top: 0, alignSelf: 'flex-start', height: '100vh', background: 'radial-gradient(120% 80% at 30% 16%, #efe4cd 0%, #e4d7ba 60%, #d9c9a6 100%)', borderRight: '1px solid #d8cbac', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '56px 48px', overflow: 'hidden' }}>
       {/* ambient glow */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', backgroundColor: spineColor, opacity: isBook ? .34 : 0, WebkitMaskImage: 'radial-gradient(60% 55% at 50% 42%, #000 0%, transparent 70%)', maskImage: 'radial-gradient(60% 55% at 50% 42%, #000 0%, transparent 70%)', mixBlendMode: 'multiply', transition: 'background-color .6s ease, opacity .6s ease' }} />
 
@@ -141,6 +142,7 @@ function BookHero({ coverUrl, spineColor, title, author, step }: { coverUrl: str
 /* ── Page ── */
 export function AddBookPage() {
   const navigate = useNavigate();
+  const { setYear } = useYear();
   const [step, setStep] = useState<'search' | 'form' | 'done'>('search');
   const [candidate, setCandidate] = useState<MetaCandidate | null>(null);
   const [lastAdded, setLastAdded] = useState<{ title: string; authors: string[]; coverUrl: string | null; genres: string[] } | null>(null);
@@ -160,7 +162,7 @@ export function AddBookPage() {
         <BookHero coverUrl={heroCover} spineColor={heroSpine} title={heroTitle} author={heroAuthor} step={step} />
 
         {/* Right panel */}
-        <div style={{ flex: 1, minWidth: 0, padding: '60px 60px 84px', overflowY: 'auto' }}>
+        <div style={{ flex: 1, minWidth: 0, padding: 'clamp(28px,5vw,60px) clamp(16px,5vw,60px) clamp(80px,10vw,84px)', overflowY: 'auto' }}>
           {step === 'search' && (
             <SearchStep onPick={pickCandidate} onManual={goManual} />
           )}
@@ -175,9 +177,16 @@ export function AddBookPage() {
               <div style={{ maxWidth: 600 }}>
                 <BookForm
                   initialCandidate={candidate ?? undefined}
-                  onClose={() => {
+                  onClose={(savedBook?: Book) => {
+                    if (!savedBook) return setStep('search');
+                    setYear(wallYearForBook(savedBook));
                     setStep('done');
-                    setLastAdded(candidate ? { title: candidate.title, authors: candidate.authors, coverUrl: candidate.coverUrl, genres: candidate.genres } : null);
+                    setLastAdded({
+                      title: savedBook.title,
+                      authors: savedBook.authors,
+                      coverUrl: savedBook.coverUrl,
+                      genres: savedBook.genres
+                    });
                   }}
                 />
               </div>
@@ -209,4 +218,9 @@ export function AddBookPage() {
       </div>
     </AppShell>
   );
+}
+
+function wallYearForBook(book: Book) {
+  const date = book.finishedAt ?? book.startedAt ?? book.createdAt;
+  return new Date(date).getFullYear();
 }

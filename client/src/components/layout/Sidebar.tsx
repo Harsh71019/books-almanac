@@ -1,6 +1,6 @@
 import type React from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
-import { useYears } from '@/lib/queries';
+import { NavLink } from 'react-router-dom';
+import { useBookYears } from '@/lib/queries';
 import { useYear } from '@/features/year/YearContext';
 
 const NAV = [
@@ -20,9 +20,8 @@ const BOTTOM_NAV = [
 ];
 
 export function Sidebar() {
-  const { data: years } = useYears();
+  const { data: years } = useBookYears();
   const { year: activeYear, setYear } = useYear();
-  const location = useLocation();
 
   const activeYearData = years?.find(y => y.year === activeYear);
 
@@ -33,7 +32,6 @@ export function Sidebar() {
         width: 250,
         flexShrink: 0,
         height: '100vh',
-        display: 'flex',
         flexDirection: 'column',
         background: 'linear-gradient(180deg,#ece1cd,#e7dcc5)',
         borderRight: '1px solid #d8cbac',
@@ -104,6 +102,29 @@ export function Sidebar() {
                 Reading Year
               </div>
               <div style={{ display: 'flex', gap: 16, alignItems: 'baseline', overflowX: 'auto', paddingBottom: 6, margin: '0 -4px', scrollbarWidth: 'none' } as React.CSSProperties}>
+                {/* All button */}
+                <button
+                  onClick={() => setYear(null)}
+                  style={{
+                    flex: '0 0 auto',
+                    padding: '0 0 6px',
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    fontFamily: "'Newsreader', serif",
+                    lineHeight: 1,
+                    whiteSpace: 'nowrap',
+                    fontSize: activeYear === null ? 27 : 17,
+                    fontWeight: activeYear === null ? 500 : 400,
+                    fontStyle: activeYear === null ? 'normal' : 'italic',
+                    color: activeYear === null ? '#221b13' : '#a99c83',
+                    borderBottom: activeYear === null ? '2px solid #b15539' : '2px solid transparent',
+                    transition: 'font-size .25s, color .25s',
+                  }}
+                >
+                  All
+                </button>
+
                 {years.map(({ year: y }) => {
                   const isActive = y === activeYear;
                   return (
@@ -134,7 +155,20 @@ export function Sidebar() {
               </div>
             </div>
 
-            {activeYearData && (
+            {activeYear === null ? (
+              <div style={{ paddingTop: 16, borderTop: '1px solid #d6c8a8', fontFamily: "'Newsreader', serif" }}>
+                <div style={{ fontSize: 15, color: '#5c5140' }}>
+                  <span style={{ fontWeight: 600, color: '#221b13', fontSize: 19 }}>
+                    {years.reduce((s, y) => s + y.count, 0)}
+                  </span> books
+                </div>
+                <div style={{ fontSize: 15, color: '#5c5140' }}>
+                  <span style={{ fontWeight: 600, color: '#221b13', fontSize: 19 }}>
+                    {years.reduce((s, y) => s + y.pages, 0).toLocaleString()}
+                  </span> pages
+                </div>
+              </div>
+            ) : activeYearData ? (
               <div style={{ paddingTop: 16, borderTop: '1px solid #d6c8a8', fontFamily: "'Newsreader', serif" }}>
                 <div style={{ fontSize: 15, color: '#5c5140' }}>
                   <span style={{ fontWeight: 600, color: '#221b13', fontSize: 19 }}>{activeYearData.count}</span> books
@@ -143,7 +177,7 @@ export function Sidebar() {
                   <span style={{ fontWeight: 600, color: '#221b13', fontSize: 19 }}>{activeYearData.pages.toLocaleString()}</span> pages
                 </div>
               </div>
-            )}
+            ) : null}
           </>
         )}
 
@@ -183,23 +217,78 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Mobile navigation"
-      className="md:hidden fixed bottom-0 inset-x-0 flex z-30"
-      style={{ background: '#e7dcc5', borderTop: '1px solid #d8cbac' }}
+      className="md:hidden fixed z-30"
+      style={{
+        left: 14,
+        right: 14,
+        bottom: 'calc(14px + env(safe-area-inset-bottom, 0px))',
+
+        /* liquid glass pill */
+        borderRadius: 32,
+        background: 'rgba(236, 224, 200, 0.52)',
+        WebkitBackdropFilter: 'blur(28px) saturate(180%) brightness(1.08)',
+        backdropFilter: 'blur(28px) saturate(180%) brightness(1.08)',
+
+        /* rim highlight + shadow */
+        border: '1px solid rgba(255, 248, 225, 0.72)',
+        boxShadow: [
+          '0 12px 40px rgba(40, 24, 6, 0.18)',
+          '0 4px 12px rgba(40, 24, 6, 0.10)',
+          'inset 0 1.5px 0 rgba(255, 255, 255, 0.65)',
+          'inset 0 -1px 0 rgba(140, 100, 40, 0.12)',
+        ].join(', '),
+
+        /* subtle inner specular gradient */
+        backgroundImage: 'linear-gradient(180deg, rgba(255,250,235,0.38) 0%, rgba(220,206,178,0.18) 100%)',
+      }}
     >
-      {BOTTOM_NAV.map(({ to, label, icon }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={to === '/'}
-          className="flex-1 flex flex-col items-center gap-0.5 py-2 text-[10px] transition-colors focus-visible:outline-2"
-          style={({ isActive }) => ({
-            color: isActive ? '#b15539' : '#7a6e58',
-          })}
-        >
-          <span className="text-lg" aria-hidden="true">{icon}</span>
-          {label}
-        </NavLink>
-      ))}
+      <div style={{ display: 'flex', padding: '6px 8px' }}>
+        {BOTTOM_NAV.map(({ to, label, icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={to === '/'}
+            style={({ isActive }) => ({
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 2,
+              padding: '8px 4px 7px',
+              borderRadius: 22,
+              textDecoration: 'none',
+              fontSize: 10,
+              fontFamily: "'Spline Sans', sans-serif",
+              letterSpacing: '.02em',
+              transition: 'background 0.22s ease, color 0.18s ease',
+              background: isActive
+                ? 'rgba(177, 85, 57, 0.13)'
+                : 'transparent',
+              color: isActive ? '#b15539' : '#7a6855',
+              fontWeight: isActive ? 600 : 400,
+            })}
+          >
+            {({ isActive }) => (
+              <>
+                <span
+                  style={{
+                    fontSize: 20,
+                    lineHeight: 1,
+                    filter: isActive ? 'drop-shadow(0 1px 3px rgba(177,85,57,0.35))' : 'none',
+                    transition: 'filter 0.18s ease, transform 0.18s ease',
+                    display: 'block',
+                    transform: isActive ? 'translateY(-1px)' : 'none',
+                  }}
+                  aria-hidden="true"
+                >
+                  {icon}
+                </span>
+                {label}
+              </>
+            )}
+          </NavLink>
+        ))}
+      </div>
     </nav>
   );
 }

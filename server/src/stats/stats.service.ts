@@ -97,6 +97,152 @@ export class StatsService {
     ]);
   }
 
+  async allTime() {
+    const match = { status: 'read', finishedAt: { $ne: null } };
+
+    const [
+      books,
+      keyStats,
+      byYear,
+      monthly,
+      genreBreakdown,
+      formatBreakdown,
+      languageBreakdown,
+      decadeBreakdown
+    ] = await Promise.all([
+      this.bookModel.find(match).sort({ finishedAt: 1 }).lean().exec(),
+      this.bookModel.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: null,
+            totalBooks: { $sum: 1 },
+            totalPages: { $sum: { $ifNull: ['$pageCount', 0] } },
+            avgRating: { $avg: '$rating' },
+            fiveStarCount: { $sum: { $cond: [{ $eq: ['$rating', 5] }, 1, 0] } },
+            r5:   { $sum: { $cond: [{ $eq: ['$rating', 5] },   1, 0] } },
+            r4_5: { $sum: { $cond: [{ $eq: ['$rating', 4.5] }, 1, 0] } },
+            r4:   { $sum: { $cond: [{ $eq: ['$rating', 4] },   1, 0] } },
+            r3_5: { $sum: { $cond: [{ $eq: ['$rating', 3.5] }, 1, 0] } },
+            r3:   { $sum: { $cond: [{ $eq: ['$rating', 3] },   1, 0] } },
+            r2_5: { $sum: { $cond: [{ $eq: ['$rating', 2.5] }, 1, 0] } },
+            r2:   { $sum: { $cond: [{ $eq: ['$rating', 2] },   1, 0] } },
+            r1_5: { $sum: { $cond: [{ $eq: ['$rating', 1.5] }, 1, 0] } },
+            r1:   { $sum: { $cond: [{ $eq: ['$rating', 1] },   1, 0] } },
+            r0_5: { $sum: { $cond: [{ $eq: ['$rating', 0.5] }, 1, 0] } },
+            longestBookPages: { $max: '$pageCount' },
+            avgDaysToFinish: {
+              $avg: {
+                $cond: [
+                  { $and: ['$startedAt', '$finishedAt'] },
+                  { $divide: [{ $subtract: ['$finishedAt', '$startedAt'] }, 86_400_000] },
+                  null
+                ]
+              }
+            },
+            oldestPublished: { $min: '$publishedYear' },
+            newestPublished: { $max: '$publishedYear' }
+          }
+        }
+      ]),
+      this.bookModel.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: { $year: '$finishedAt' },
+            count: { $sum: 1 },
+            pages: { $sum: { $ifNull: ['$pageCount', 0] } },
+            avgRating: { $avg: '$rating' }
+          }
+        },
+        { $sort: { _id: 1 } },
+        { $project: { _id: 0, year: '$_id', count: 1, pages: 1, avgRating: 1 } }
+      ]),
+      this.bookModel.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: { $month: '$finishedAt' },
+            count: { $sum: 1 },
+            pages: { $sum: { $ifNull: ['$pageCount', 0] } }
+          }
+        },
+        { $sort: { _id: 1 } },
+        { $project: { _id: 0, month: '$_id', count: 1, pages: 1 } }
+      ]),
+      this.bookModel.aggregate([
+        { $match: match },
+        { $unwind: '$genres' },
+        {
+          $group: {
+            _id: '$genres',
+            count: { $sum: 1 },
+            pages: { $sum: { $ifNull: ['$pageCount', 0] } },
+            avgRating: { $avg: '$rating' }
+          }
+        },
+        { $sort: { count: -1, pages: -1 } },
+        { $project: { _id: 0, genre: '$_id', count: 1, pages: 1, avgRating: 1 } }
+      ]),
+      this.bookModel.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: '$format',
+            count: { $sum: 1 },
+            pages: { $sum: { $ifNull: ['$pageCount', 0] } }
+          }
+        },
+        { $project: { _id: 0, format: '$_id', count: 1, pages: 1 } }
+      ]),
+      this.bookModel.aggregate([
+        { $match: { ...match, language: { $ne: null } } },
+        { $group: { _id: '$language', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $project: { _id: 0, language: '$_id', count: 1 } }
+      ]),
+      this.bookModel.aggregate([
+        { $match: { ...match, publishedYear: { $ne: null } } },
+        {
+          $group: {
+            _id: { $multiply: [{ $floor: { $divide: ['$publishedYear', 10] } }, 10] },
+            count: { $sum: 1 }
+          }
+        },
+        { $sort: { _id: 1 } },
+        { $project: { _id: 0, decade: '$_id', count: 1 } }
+      ])
+    ]);
+
+    const raw = keyStats[0] ?? {
+      totalBooks: 0, totalPages: 0, avgRating: null,
+      fiveStarCount: 0,
+      r5: 0, r4_5: 0, r4: 0, r3_5: 0, r3: 0, r2_5: 0, r2: 0, r1_5: 0, r1: 0, r0_5: 0,
+      longestBookPages: null, avgDaysToFinish: null, oldestPublished: null, newestPublished: null
+    };
+
+    const stats = this.normalizeKeyStats(raw);
+
+    return {
+      scope: 'all',
+      books: books.map((b) => this.leanBook(b)),
+      keyStats: {
+        ...stats,
+        fastestRead: this.fastestRead(books),
+        longestBook: this.longestBook(books),
+        oldestBook: this.oldestBook(books),
+        topAuthor: this.topAuthor(books),
+        topGenre: genreBreakdown[0]?.genre ?? null
+      },
+      byYear,
+      monthly: this.addDominantGenre(monthly, books),
+      genreBreakdown,
+      formatBreakdown,
+      languageBreakdown,
+      decadeBreakdown
+    };
+  }
+
   async year(year: number) {
     const match = {
       status: 'read',
@@ -214,21 +360,7 @@ export class StatsService {
       longestBookPages: null, avgDaysToFinish: null, oldestPublished: null, newestPublished: null
     };
 
-    const stats = {
-      totalBooks: raw.totalBooks,
-      totalPages: raw.totalPages,
-      avgRating: raw.avgRating ?? null,
-      fiveStarCount: raw.fiveStarCount,
-      ratingDistribution: {
-        '5':   raw.r5,   '4.5': raw.r4_5, '4':   raw.r4,
-        '3.5': raw.r3_5, '3':   raw.r3,   '2.5': raw.r2_5,
-        '2':   raw.r2,   '1.5': raw.r1_5, '1':   raw.r1,   '0.5': raw.r0_5
-      },
-      longestBookPages: raw.longestBookPages,
-      avgDaysToFinish: raw.avgDaysToFinish ?? null,
-      oldestPublished: raw.oldestPublished ?? null,
-      newestPublished: raw.newestPublished ?? null
-    };
+    const stats = this.normalizeKeyStats(raw);
 
     const yearlyGoal = user?.settings?.yearlyGoal ?? 30;
 
@@ -338,6 +470,24 @@ export class StatsService {
       id: String(d._id),
       authors: (d.authors as string[] | undefined) ?? [],
       genres:  (d.genres  as string[] | undefined) ?? [],
+    };
+  }
+
+  private normalizeKeyStats(raw: Record<string, number | null>) {
+    return {
+      totalBooks: raw.totalBooks ?? 0,
+      totalPages: raw.totalPages ?? 0,
+      avgRating: raw.avgRating ?? null,
+      fiveStarCount: raw.fiveStarCount ?? 0,
+      ratingDistribution: {
+        '5':   raw.r5 ?? 0,   '4.5': raw.r4_5 ?? 0, '4':   raw.r4 ?? 0,
+        '3.5': raw.r3_5 ?? 0, '3':   raw.r3 ?? 0,   '2.5': raw.r2_5 ?? 0,
+        '2':   raw.r2 ?? 0,   '1.5': raw.r1_5 ?? 0, '1':   raw.r1 ?? 0,   '0.5': raw.r0_5 ?? 0
+      },
+      longestBookPages: raw.longestBookPages ?? null,
+      avgDaysToFinish: raw.avgDaysToFinish ?? null,
+      oldestPublished: raw.oldestPublished ?? null,
+      newestPublished: raw.newestPublished ?? null
     };
   }
 

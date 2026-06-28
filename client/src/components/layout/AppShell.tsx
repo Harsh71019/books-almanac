@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
-import { motion } from 'framer-motion';
 import { Sidebar, BottomNav } from './Sidebar';
+import { MobileTopBar } from './MobileTopBar';
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -19,15 +19,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         id="main-content"
         style={{ flex: 1, height: '100%', overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}
         tabIndex={-1}
-        className="pb-16 md:pb-0"
+        className="pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-0"
       >
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22, ease: 'easeOut' }}
-        >
-          {children}
-        </motion.div>
+        <MobileTopBar />
+        {children}
       </main>
 
       <BottomNav />

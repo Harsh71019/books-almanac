@@ -24,6 +24,8 @@ export function YearPage() {
 
   const { data: years } = useYears();
   const { data, isLoading } = useYearStats(year);
+  const isAllTime = year === null;
+  const heading = isAllTime ? 'All time' : String(year);
 
   // Fill monthly data for all 12 months
   const monthlyFull = Array.from({ length: 12 }, (_, i) => {
@@ -48,19 +50,20 @@ export function YearPage() {
     <AppShell>
       <div className="px-6 py-8 max-w-5xl mx-auto space-y-8">
 
-        {/* Year switcher */}
+        {/* Scope switcher */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setYear(year - 1)}
+              onClick={() => year !== null && setYear(year - 1)}
+              disabled={year === null}
               className="px-2.5 py-1.5 rounded border border-[var(--line)] text-[var(--muted)] hover:border-[var(--muted)] text-sm transition-colors"
             >
               ←
             </button>
-            <h1 className="font-display text-4xl text-[var(--parchment)]">{year}</h1>
+            <h1 className="font-display text-4xl text-[var(--parchment)]">{heading}</h1>
             <button
-              onClick={() => setYear(year + 1)}
-              disabled={year >= CURRENT_YEAR}
+              onClick={() => year !== null && setYear(year + 1)}
+              disabled={year === null || year >= CURRENT_YEAR}
               className="px-2.5 py-1.5 rounded border border-[var(--line)] text-[var(--muted)] hover:border-[var(--muted)] text-sm transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
               →
@@ -69,6 +72,15 @@ export function YearPage() {
 
           {years && years.length > 0 && (
             <div className="flex gap-1.5 flex-wrap">
+              <button
+                onClick={() => setYear(null)}
+                className={`text-xs px-2.5 py-1 rounded border transition-colors ${
+                  isAllTime
+                    ? 'border-[var(--gilt)] text-[var(--gilt)] bg-[var(--gilt)]/10'
+                    : 'border-[var(--line)] text-[var(--muted)] hover:border-[var(--muted)]'
+                }`}>
+                All
+              </button>
               {years.map(({ year: y }) => (
                 <button key={y}
                   onClick={() => setYear(y)}
@@ -119,7 +131,7 @@ export function YearPage() {
             )}
 
             {/* Goal progress */}
-            {goal.target > 0 && (
+            {!isAllTime && goal.target > 0 && (
               <Card className="flex items-center gap-6 p-5">
                 <GoalRing achieved={goal.achieved} target={goal.target} size={80} />
                 <div>
@@ -135,11 +147,33 @@ export function YearPage() {
               </Card>
             )}
 
-            {/* Spine wall — the centrepiece */}
+            {/* Spine wall */}
             <section>
-              <SectionHeader title={`${readBooks.length} book${readBooks.length !== 1 ? 's' : ''} on the shelf`} />
+              <SectionHeader title={`${readBooks.length} book${readBooks.length !== 1 ? 's' : ''} ${isAllTime ? 'across every shelf' : 'on the shelf'}`} />
               <SpineWall books={readBooks} onBookClick={setSelected} />
             </section>
+
+            {isAllTime && data.byYear && data.byYear.length > 0 && (
+              <section>
+                <SectionHeader title="Year by year" />
+                <Card className="p-4">
+                  <div className="h-44">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={data.byYear} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
+                        <XAxis dataKey="year" tick={{ fill: 'var(--muted)', fontSize: 10 }} tickLine={false} axisLine={false} />
+                        <YAxis allowDecimals={false} tick={{ fill: 'var(--muted)', fontSize: 10 }} tickLine={false} axisLine={false} />
+                        <Tooltip
+                          contentStyle={{ background: 'var(--ink-raised)', border: '1px solid var(--line)', borderRadius: 6, fontSize: 12, color: 'var(--parchment)' }}
+                          cursor={{ fill: 'rgba(201,162,75,0.08)' }}
+                          formatter={(value) => [value, 'books']}
+                        />
+                        <Bar dataKey="count" radius={[3, 3, 0, 0]} fill="var(--gilt-soft)" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+              </section>
+            )}
 
             {/* Monthly rhythm */}
             <section>
@@ -297,8 +331,8 @@ export function YearPage() {
 
         {!isLoading && !data && (
           <div className="text-center py-20 text-[var(--muted)]">
-            <p className="font-display text-2xl text-[var(--parchment)] mb-2">No data for {year}.</p>
-            <p className="text-sm">Log books with a finished date in {year} to see your year view.</p>
+            <p className="font-display text-2xl text-[var(--parchment)] mb-2">No data for {heading}.</p>
+            <p className="text-sm">Log books with a finished date to see your stats.</p>
           </div>
         )}
       </div>
