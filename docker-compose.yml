@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    container_name: reading-almanac
+    env_file:
+      - .env
+    ports:
+      - "${PORT:-4000}:4000"
+    volumes:
+      - ./uploads:/app/uploads
+    restart: unless-stopped

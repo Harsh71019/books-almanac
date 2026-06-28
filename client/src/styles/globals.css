@@ -1,0 +1,48 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  background: var(--bg);
+  color: var(--parchment);
+  font-family: 'Spline Sans', system-ui, sans-serif;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+
+body { margin: 0; min-height: 100dvh; }
+
+/* Typography helpers */
+.font-display { font-family: 'Newsreader', Georgia, serif; }
+.font-serif   { font-family: 'Newsreader', Georgia, serif; }
+.font-mono    { font-family: 'JetBrains Mono', 'Courier New', monospace; }
+
+/* Focus ring */
+:focus-visible {
+  outline: 2px solid var(--gilt);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar        { width: 11px; height: 11px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  {
+  background: #cdbfa3;
+  border-radius: 11px;
+  border: 3px solid var(--bg);
+  background-clip: content-box;
+}
+
+input::placeholder { color: #a99c83; }
+textarea::placeholder { color: #a99c83; }
+
+@keyframes fadeUp  { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:none } }
+@keyframes liftIn  { from { opacity:0; transform:translateY(28px) scale(.985) } to { opacity:1; transform:none } }
+@keyframes spin    { to { transform: rotate(360deg) } }
+@keyframes pulse   {
+  0%   { box-shadow: 0 0 0 0   rgba(217,138,90,.55) }
+  70%  { box-shadow: 0 0 0 7px rgba(217,138,90,0)   }
+  100% { box-shadow: 0 0 0 0   rgba(217,138,90,0)   }
+}

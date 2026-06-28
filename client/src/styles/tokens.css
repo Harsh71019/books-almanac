@@ -1,0 +1,55 @@
+/* Shelf — warm parchment palette */
+:root {
+  --bg:         #efe7d9;
+  --bg-main:    radial-gradient(120% 120% at 80% 0%, #f3ecdf 0%, #ece2cf 55%, #e6dbc4 100%);
+  --sidebar-bg: linear-gradient(180deg, #ece1cd, #e7dcc5);
+
+  /* surface layers */
+  --ink:        #efe7d9;      /* main page background */
+  --ink-raised: #f4ecdc;      /* card / panel surface */
+  --ink-sunken: #e3d6bb;      /* inset / input background */
+
+  /* text */
+  --parchment:  #221b13;      /* primary text (dark on light) */
+  --muted:      #9a8a6c;      /* secondary / caption text */
+
+  /* borders */
+  --line:       #ddcfb0;      /* default border */
+  --line-strong:#d8cbac;      /* sidebar / strong dividers */
+
+  /* accent — terracotta */
+  --gilt:       #b15539;
+  --gilt-soft:  #c8643f;
+
+  /* sidebar active item */
+  --nav-active-bg:   #221b13;
+  --nav-active-text: #f3ecdf;
+  --nav-idle-text:   #5c5140;
+}
+
+/* Genre cloth palette — unchanged */
+:root {
+  --genre-fiction:          #8C3B34;
+  --genre-literary-fiction: #6E2F46;
+  --genre-sci-fi:           #36456B;
+  --genre-fantasy:          #3E5C45;
+  --genre-thriller:         #4A5560;
+  --genre-mystery:          #5C3A53;
+  --genre-horror:           #A85A3C;
+  --genre-romance:          #9B5B3E;
+  --genre-history:          #C08A2D;
+  --genre-philosophy:       #46688C;
+  --genre-religion:         #6B6B3A;
+  --genre-mythology:        #2E6B66;
+  --genre-politics:         #4A5560;
+  --genre-biography:        #8C3B34;
+  --genre-business:         #C08A2D;
+  --genre-psychology:       #5C3A53;
+  --genre-self-improvement: #3E5C45;
+  --genre-science:          #36456B;
+  --genre-technology:       #46688C;
+  --genre-true-crime:       #A85A3C;
+  --genre-poetry:           #6E2F46;
+  --genre-classics:         #9B5B3E;
+  --genre-default:          #4A5560;
+}
