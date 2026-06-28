@@ -1,6 +1,6 @@
 import { useState, useRef, type FormEvent } from 'react';
 import { CANONICAL_GENRES } from '@reading-almanac/shared';
-import { useCreateBook, useUpdateBook, useUploadCover } from '@/lib/queries';
+import { useCreateBook, useUpdateBook, useUploadCover, useCacheCover } from '@/lib/queries';
 import { MetaSearch } from './MetaSearch';
 import { Chip } from '@/components/ui/Chip';
 import { Button } from '@/components/ui/Button';
@@ -85,6 +85,7 @@ export function BookForm({ book, initialCandidate, onClose }: BookFormProps) {
   const create = useCreateBook();
   const update = useUpdateBook();
   const upload = useUploadCover();
+  const cacheCover = useCacheCover();
 
   const set = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
 
@@ -100,6 +101,11 @@ export function BookForm({ book, initialCandidate, onClose }: BookFormProps) {
       language: c.language ?? '',
       source: c.source
     });
+    if (c.coverUrl) {
+      cacheCover.mutate(c.coverUrl, {
+        onSuccess: ({ url }) => set({ coverUrl: url })
+      });
+    }
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -5,10 +5,14 @@ import { BookQueryDto, CreateBookDto, UpdateBookDto } from './dto';
 import { Book, BookDocument } from './book.schema';
 import { startOfNextYear, startOfYear, toDateOrNull } from '../common/utils/date';
 import { normaliseGenre } from '@reading-almanac/shared';
+import { CoverCacheService } from '../uploads/cover-cache.service';
 
 @Injectable()
 export class BooksService {
-  constructor(@InjectModel(Book.name) private readonly bookModel: Model<BookDocument>) {}
+  constructor(
+    @InjectModel(Book.name) private readonly bookModel: Model<BookDocument>,
+    private readonly coverCacheService: CoverCacheService
+  ) {}
 
   async list(query: BookQueryDto) {
     const filter = this.buildFilter(query);
@@ -32,7 +36,8 @@ export class BooksService {
   async create(dto: CreateBookDto) {
     const normalized = this.normalizeDates(dto);
     const withGenres = { ...normalized, genres: (normalized.genres ?? []).map(normaliseGenre) };
-    const book = await this.bookModel.create(this.applyStatusDateNudges(withGenres));
+    const withCachedCover = await this.cacheCover(withGenres);
+    const book = await this.bookModel.create(this.applyStatusDateNudges(withCachedCover));
     return this.toResponse(book.toObject());
   }
 
@@ -48,7 +53,8 @@ export class BooksService {
     const withGenres = normalized.genres
       ? { ...normalized, genres: normalized.genres.map(normaliseGenre) }
       : normalized;
-    const update = this.applyStatusDateNudges(withGenres);
+    const withCachedCover = await this.cacheCover(withGenres);
+    const update = this.applyStatusDateNudges(withCachedCover);
     const book = await this.bookModel
       .findByIdAndUpdate(id, { $set: update }, { new: true, runValidators: true })
       .lean()
@@ -159,6 +165,14 @@ export class BooksService {
       ...dto,
       startedAt: toDateOrNull(dto.startedAt),
       finishedAt: toDateOrNull(dto.finishedAt)
+    };
+  }
+
+  private async cacheCover<T extends Partial<Book>>(book: T): Promise<T> {
+    if (!book.coverUrl) return book;
+    return {
+      ...book,
+      coverUrl: await this.coverCacheService.cacheExternalCover(book.coverUrl)
     };
   }
 

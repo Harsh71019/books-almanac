@@ -71,6 +71,12 @@ export function useUploadCover() {
   });
 }
 
+export function useCacheCover() {
+  return useMutation({
+    mutationFn: (url: string) => api.post<{ url: string }>('/uploads/cache-cover', { url })
+  });
+}
+
 /* ── Meta search ── */
 
 export function useMetaSearch(q: string) {
