@@ -81,4 +81,13 @@ export class BooksController {
   removeEpub(@Param() params: ObjectIdParamDto) {
     return this.booksService.removeEpub(params.id);
   }
+
+  @Get(':id/epub/file')
+  async serveEpub(@Param() params: ObjectIdParamDto, @Res() res: Response) {
+    const { path, filename } = await this.booksService.getEpubFilePath(params.id);
+    res.setHeader('Content-Type', 'application/epub+zip');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.sendFile(path);
+  }
 }

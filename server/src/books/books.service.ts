@@ -81,6 +81,18 @@ export class BooksService {
     return this.toResponse(book);
   }
 
+  async getEpubFilePath(id: string) {
+    const book = await this.bookModel.findById(id).lean().exec();
+    if (!book) throw new NotFoundException('Book not found');
+    if (!book.epubPath) throw new NotFoundException('No EPUB attached to this book');
+
+    const uploadDir = resolveConfiguredPath(process.env.UPLOAD_DIR ?? 'uploads');
+    return {
+      path: join(uploadDir, book.epubPath),
+      filename: `${book.title}.epub`
+    };
+  }
+
   async removeEpub(id: string) {
     const book = await this.bookModel.findById(id).lean().exec();
     if (!book) throw new NotFoundException('Book not found');
