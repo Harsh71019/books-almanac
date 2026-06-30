@@ -174,7 +174,10 @@ export const bookBaseSchema = z.object({
   startedAt: nullableDate,
   finishedAt: nullableDate,
   review: z.string().trim().max(20000).nullable().optional(),
-  source: z.enum(BOOK_SOURCES).default('manual')
+  source: z.enum(BOOK_SOURCES).default('manual'),
+  epubPath: z.string().nullable().optional(),
+  epubSize: z.number().int().min(0).nullable().optional(),
+  lastReadCfi: z.string().nullable().optional()
 });
 
 export const createBookSchema = bookBaseSchema.superRefine((book, ctx) => {

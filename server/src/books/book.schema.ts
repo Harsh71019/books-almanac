@@ -55,6 +55,15 @@ export class Book {
 
   @Prop({ type: String, enum: ['google_books', 'open_library', 'manual'], default: 'manual' })
   source: 'google_books' | 'open_library' | 'manual';
+
+  @Prop({ type: String, default: null })
+  epubPath: string | null;
+
+  @Prop({ type: Number, default: null })
+  epubSize: number | null;
+
+  @Prop({ type: String, default: null })
+  lastReadCfi: string | null;
 }
 
 export const BookSchema = SchemaFactory.createForClass(Book);
