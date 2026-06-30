@@ -48,6 +48,31 @@ export function ReaderPage() {
     });
     renditionRef.current = rendition;
 
+    // Inject book theme: cream paper, readable serif, comfortable leading
+    rendition.themes.register('book', {
+      'html, body': {
+        'background':   '#f9f6f0 !important',
+        'color':        '#1a1509 !important',
+        'font-family':  '"Georgia", "Times New Roman", serif !important',
+        'font-size':    '18px !important',
+        'line-height':  '1.85 !important',
+        'text-align':   'justify !important',
+        'word-spacing': '0.02em !important',
+      },
+      'p': {
+        'margin-top':    '0 !important',
+        'margin-bottom': '0.9em !important',
+      },
+      'h1, h2, h3, h4': {
+        'font-family':   '"Georgia", serif !important',
+        'font-weight':   '700 !important',
+        'line-height':   '1.3 !important',
+        'margin-bottom': '0.6em !important',
+      },
+      'a': { 'color': '#7a4f2a !important' },
+    });
+    rendition.themes.select('book');
+
     rendition.on('keydown', (e: KeyboardEvent) => window.dispatchEvent(new KeyboardEvent('keydown', e)));
 
     const init = async () => {
@@ -105,36 +130,49 @@ export function ReaderPage() {
 
   if (error) {
     return (
-      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4" style={{ background: '#1c1814', color: '#d4c9b0' }}>
-        <p className="text-sm opacity-60">Failed to load: {error}</p>
-        <button onClick={() => navigate(-1)} className="text-xs opacity-40 hover:opacity-70 transition-opacity">← Go back</button>
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4" style={{ background: '#f9f6f0', color: '#1a1509' }}>
+        <p className="text-sm opacity-50">Failed to load: {error}</p>
+        <button onClick={() => navigate(-1)} className="text-xs opacity-40 hover:opacity-80 transition-opacity">← Go back</button>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0" style={{ background: '#1c1814' }}>
+    <div className="fixed inset-0" style={{ background: '#e8e3d8' }}>
       {/* Loading overlay */}
       {loading && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-6" style={{ background: '#1c1814' }}>
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-6" style={{ background: '#f9f6f0' }}>
           {book?.coverUrl && (
             <div
-              className="absolute inset-0 opacity-10"
-              style={{ backgroundImage: `url("${book.coverUrl}")`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'blur(24px)' }}
+              className="absolute inset-0 opacity-5"
+              style={{ backgroundImage: `url("${book.coverUrl}")`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'blur(32px)' }}
             />
           )}
           <div className="relative z-10 flex flex-col items-center gap-3 text-center px-6">
             {book?.coverUrl && (
-              <img src={book.coverUrl} alt="" className="w-20 h-28 object-cover rounded shadow-2xl" />
+              <img src={book.coverUrl} alt="" className="w-20 h-28 object-cover rounded shadow-lg" />
             )}
-            <p className="text-base font-medium" style={{ color: '#d4c9b0' }}>{book?.title}</p>
-            <p className="text-sm" style={{ color: '#9a8a6c' }}>{book?.authors?.join(', ')}</p>
-            <span className="mt-2 size-5 border-2 border-[#b15539] border-t-transparent rounded-full animate-spin block" />
+            <p className="text-base font-medium" style={{ color: '#1a1509', fontFamily: 'Georgia, serif' }}>{book?.title}</p>
+            <p className="text-sm" style={{ color: '#7a6a4a' }}>{book?.authors?.join(', ')}</p>
+            <span className="mt-2 size-5 border-2 border-[#7a4f2a] border-t-transparent rounded-full animate-spin block" />
           </div>
         </div>
       )}
 
-      {/* Click zones: left third / right third to turn pages */}
+      {/* Page-shadow column — epub renders inside here */}
+      <div className="absolute inset-0 flex justify-center">
+        <div
+          ref={viewerRef}
+          className="h-full w-full"
+          style={{
+            maxWidth: 900,
+            background: '#f9f6f0',
+            boxShadow: '0 0 80px rgba(0,0,0,0.15)',
+          }}
+        />
+      </div>
+
+      {/* Click zones */}
       {!loading && (
         <>
           <div className="absolute inset-y-0 left-0 w-[30%] z-10 cursor-w-resize" onClick={prev} />
@@ -142,14 +180,11 @@ export function ReaderPage() {
         </>
       )}
 
-      {/* epub iframe mount point */}
-      <div ref={viewerRef} className="w-full h-full" />
-
-      {/* Minimal back button — always visible top-left */}
+      {/* Back button */}
       <button
         onClick={() => navigate(-1)}
         className="absolute top-4 left-4 z-20 text-xs px-3 py-1.5 rounded transition-opacity opacity-0 hover:opacity-100 focus:opacity-100"
-        style={{ background: 'rgba(28,24,20,0.8)', color: '#9a8a6c', backdropFilter: 'blur(4px)' }}
+        style={{ background: 'rgba(249,246,240,0.9)', color: '#4a3a1a', border: '1px solid rgba(0,0,0,0.1)', backdropFilter: 'blur(4px)' }}
       >
         ←
       </button>
