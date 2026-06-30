@@ -5,14 +5,18 @@ import { diskStorage } from 'multer';
 import { join } from 'node:path';
 import { resolveConfiguredPath } from '../common/utils/paths';
 import { BooksService } from './books.service';
-import { BookQueryDto, CreateBookDto, EpubProgressDto, ObjectIdParamDto, UpdateBookDto } from './dto';
+import { ReadingSessionsService } from '../reading-sessions/reading-sessions.service';
+import { BookQueryDto, CreateBookDto, EpubProgressDto, EpubSessionDto, ObjectIdParamDto, UpdateBookDto } from './dto';
 
 const epubUploadDir = () =>
   join(resolveConfiguredPath(process.env.UPLOAD_DIR ?? 'uploads'), 'epubs');
 
 @Controller('books')
 export class BooksController {
-  constructor(private readonly booksService: BooksService) {}
+  constructor(
+    private readonly booksService: BooksService,
+    private readonly sessionsService: ReadingSessionsService
+  ) {}
 
   @Get()
   list(@Query() query: BookQueryDto) {
@@ -85,6 +89,17 @@ export class BooksController {
   @Patch(':id/epub-progress')
   saveProgress(@Param() params: ObjectIdParamDto, @Body() dto: EpubProgressDto) {
     return this.booksService.saveEpubProgress(params.id, dto.cfi, dto.percentage, dto.estimatedPage);
+  }
+
+  @Post(':id/epub-session')
+  async createEpubSession(@Param() params: ObjectIdParamDto, @Body() dto: EpubSessionDto) {
+    if (dto.pagesRead < 1 || dto.durationSeconds < 30) return { ok: true };
+    return this.sessionsService.create({
+      date:      dto.date,
+      pagesRead: dto.pagesRead,
+      bookId:    params.id,
+      note:      null
+    });
   }
 
   @Get(':id/epub/file')
