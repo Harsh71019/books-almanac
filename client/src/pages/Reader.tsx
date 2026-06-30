@@ -51,15 +51,40 @@ export function ReaderPage() {
     rendition.on('keydown', (e: KeyboardEvent) => window.dispatchEvent(new KeyboardEvent('keydown', e)));
 
     const init = async () => {
-      // Must await ready before display — epubjs needs to finish parsing the zip
-      await epubBook.ready;
-      if (cancelled) return;
-
-      epubBook.locations.generate(1500).catch(() => undefined);
+      // Race three promises: first page rendered, epub open failure, or timeout.
+      // We cannot await book.opened/ready directly because epubjs never rejects
+      // them on failure — it just emits 'openFailed' and leaves the defer unresolved,
+      // which blocks the rendition queue forever.
+      const displayed = new Promise<void>((resolve) =>
+        (rendition as unknown as { once: (e: string, fn: () => void) => void })
+          .once('displayed', resolve)
+      );
+      const failed = new Promise<never>((_, reject) =>
+        (epubBook as unknown as { once: (e: string, fn: (err: unknown) => void) => void })
+          .once('openFailed', (err) => {
+            const msg = err && typeof err === 'object' && 'message' in err
+              ? String((err as { message: unknown }).message)
+              : 'Epub failed to open — it may be an unsupported or corrupted file';
+            reject(new Error(msg));
+          })
+      );
+      let tid: ReturnType<typeof setTimeout>;
+      const timedOut = new Promise<never>((_, reject) => {
+        tid = setTimeout(() => reject(new Error('Epub timed out loading — try re-importing the book')), 12000);
+      });
 
       const savedCfi = book?.lastReadCfi ?? undefined;
-      await rendition.display(savedCfi);
-      if (!cancelled) setLoading(false);
+      rendition.display(savedCfi).catch(() => undefined);
+
+      try {
+        await Promise.race([displayed, failed, timedOut]);
+        if (!cancelled) {
+          epubBook.locations.generate(1500).catch(() => undefined);
+          setLoading(false);
+        }
+      } finally {
+        clearTimeout(tid!);
+      }
     };
 
     init().catch((err: unknown) => {
