@@ -31,34 +31,53 @@ export function ReaderPage() {
   useEffect(() => {
     if (!viewerRef.current || !id) return;
 
-    const epubBook = ePub(`/api/books/${id}/epub/file`);
-    bookRef.current = epubBook;
+    let cancelled = false;
 
-    const isWide = window.innerWidth >= 1200;
-    const rendition = epubBook.renderTo(viewerRef.current, {
-      width:          '100%',
-      height:         '100%',
-      spread:         isWide ? 'auto' : 'none',
-      flow:           'paginated',
-      minSpreadWidth: 1200,
-    });
-    renditionRef.current = rendition;
+    const load = async () => {
+      try {
+        const res = await fetch(`/api/books/${id}/epub/file`, { credentials: 'include' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const buffer = await res.arrayBuffer();
+        if (cancelled) return;
 
-    // Generate locations for % progress (runs in background)
-    epubBook.ready.then(() => epubBook.locations.generate(1500)).catch(() => undefined);
+        // Pass ArrayBuffer so epubjs unpacks in-memory; no component-level HTTP fetches
+        const epubBook = ePub(buffer as unknown as string);
+        bookRef.current = epubBook;
 
-    // Resume from saved CFI or start of book
-    const savedCfi = book?.lastReadCfi ?? undefined;
-    rendition.display(savedCfi).then(() => setLoading(false)).catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : 'Failed to load book');
-      setLoading(false);
-    });
+        const isWide = window.innerWidth >= 1200;
+        const rendition = epubBook.renderTo(viewerRef.current!, {
+          width:          '100%',
+          height:         '100%',
+          spread:         isWide ? 'auto' : 'none',
+          flow:           'paginated',
+          minSpreadWidth: 1200,
+        });
+        renditionRef.current = rendition;
 
-    // Pass keyboard events from inside the epub iframe back up to the window
-    rendition.on('keydown', (e: KeyboardEvent) => window.dispatchEvent(new KeyboardEvent('keydown', e)));
+        epubBook.ready.then(() => epubBook.locations.generate(1500)).catch(() => undefined);
+
+        const savedCfi = book?.lastReadCfi ?? undefined;
+        rendition.display(savedCfi).then(() => { if (!cancelled) setLoading(false); }).catch((err: unknown) => {
+          if (!cancelled) {
+            setError(err instanceof Error ? err.message : 'Failed to load book');
+            setLoading(false);
+          }
+        });
+
+        rendition.on('keydown', (e: KeyboardEvent) => window.dispatchEvent(new KeyboardEvent('keydown', e)));
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to fetch epub');
+          setLoading(false);
+        }
+      }
+    };
+
+    load();
 
     return () => {
-      epubBook.destroy();
+      cancelled = true;
+      bookRef.current?.destroy();
       bookRef.current      = null;
       renditionRef.current = null;
     };

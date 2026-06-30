@@ -56,7 +56,7 @@ import { resolveConfiguredPath } from './common/utils/paths';
       useFactory: (config: ConfigService) => [
         {
           rootPath: resolveConfiguredPath(config.getOrThrow<string>('CLIENT_BUILD_DIR')),
-          exclude: ['/api/(.*)', '/uploads/(.*)']
+          exclude: ['/api/*path', '/uploads/*path']
         },
         {
           rootPath: resolveConfiguredPath(config.getOrThrow<string>('UPLOAD_DIR')),
