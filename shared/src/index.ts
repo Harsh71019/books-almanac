@@ -246,6 +246,21 @@ export const readingSessionQuerySchema = z.object({
 export type ReadingSession = z.infer<typeof readingSessionSchema>;
 export type ReadingSessionQuery = z.infer<typeof readingSessionQuerySchema>;
 
+export const epubProgressSchema = z.object({
+  cfi:           z.string().min(1),
+  percentage:    z.number().min(0).max(100),
+  estimatedPage: z.number().int().min(0).nullable().optional()
+});
+
+export const epubSessionSchema = z.object({
+  pagesRead:       z.number().int().min(1).max(5000),
+  durationSeconds: z.number().int().min(1),
+  date:            z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD')
+});
+
+export type EpubProgress = z.infer<typeof epubProgressSchema>;
+export type EpubSession  = z.infer<typeof epubSessionSchema>;
+
 export type AuthLogin = z.infer<typeof authLoginSchema>;
 export type UserResponse = z.infer<typeof userResponseSchema>;
 export type CreateBook = z.infer<typeof createBookSchema>;

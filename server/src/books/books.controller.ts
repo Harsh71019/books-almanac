@@ -5,7 +5,7 @@ import { diskStorage } from 'multer';
 import { join } from 'node:path';
 import { resolveConfiguredPath } from '../common/utils/paths';
 import { BooksService } from './books.service';
-import { BookQueryDto, CreateBookDto, ObjectIdParamDto, UpdateBookDto } from './dto';
+import { BookQueryDto, CreateBookDto, EpubProgressDto, ObjectIdParamDto, UpdateBookDto } from './dto';
 
 const epubUploadDir = () =>
   join(resolveConfiguredPath(process.env.UPLOAD_DIR ?? 'uploads'), 'epubs');
@@ -80,6 +80,11 @@ export class BooksController {
   @Delete(':id/epub')
   removeEpub(@Param() params: ObjectIdParamDto) {
     return this.booksService.removeEpub(params.id);
+  }
+
+  @Patch(':id/epub-progress')
+  saveProgress(@Param() params: ObjectIdParamDto, @Body() dto: EpubProgressDto) {
+    return this.booksService.saveEpubProgress(params.id, dto.cfi, dto.percentage, dto.estimatedPage);
   }
 
   @Get(':id/epub/file')

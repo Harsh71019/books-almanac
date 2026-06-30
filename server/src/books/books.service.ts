@@ -81,6 +81,29 @@ export class BooksService {
     return this.toResponse(book);
   }
 
+  async saveEpubProgress(id: string, cfi: string, percentage: number, estimatedPage: number | null | undefined) {
+    const book = await this.bookModel.findById(id).lean().exec();
+    if (!book) throw new NotFoundException('Book not found');
+
+    const update: Partial<Book> = { lastReadCfi: cfi };
+
+    if (estimatedPage != null) update.currentPage = estimatedPage;
+
+    if (percentage >= 98 && book.status !== 'read') {
+      update.status    = 'read';
+      update.finishedAt = new Date();
+    } else if (percentage > 0 && book.status === 'want_to_read') {
+      update.status   = 'reading';
+      update.startedAt = book.startedAt ?? new Date();
+    }
+
+    const updated = await this.bookModel
+      .findByIdAndUpdate(id, { $set: update }, { new: true })
+      .lean()
+      .exec();
+    return this.toResponse(updated!);
+  }
+
   async getEpubFilePath(id: string) {
     const book = await this.bookModel.findById(id).lean().exec();
     if (!book) throw new NotFoundException('Book not found');
