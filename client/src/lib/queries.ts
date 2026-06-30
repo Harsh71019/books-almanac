@@ -203,11 +203,11 @@ export interface KavitaSeries {
   format:   number;
 }
 
-export function useKavitaBrowse(url: string, apiKey: string, enabled: boolean) {
+export function useKavitaBrowse(url: string, username: string, password: string, enabled: boolean) {
   return useQuery<KavitaSeries[]>({
-    queryKey: ['kavita', 'browse', url, apiKey],
-    queryFn:  () => api.post('/kavita/browse', { url, apiKey }),
-    enabled:  enabled && !!url && !!apiKey,
+    queryKey: ['kavita', 'browse', url, username],
+    queryFn:  () => api.post('/kavita/browse', { url, username, password }),
+    enabled:  enabled && !!url && !!username && !!password,
     staleTime: 60_000,
     retry: false,
   });
@@ -216,7 +216,7 @@ export function useKavitaBrowse(url: string, apiKey: string, enabled: boolean) {
 export function useKavitaImport() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { url: string; apiKey: string; seriesId: number }) =>
+    mutationFn: (payload: { url: string; username: string; password: string; seriesId: number }) =>
       api.post<Book>('/kavita/import', payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['books'] });

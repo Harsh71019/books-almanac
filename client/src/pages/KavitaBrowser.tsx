@@ -4,8 +4,8 @@ import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
 import { useKavitaBrowse, useKavitaImport, type KavitaSeries } from '@/lib/queries';
 
-const LS_URL = 'kavita_url';
-const LS_KEY = 'kavita_api_key';
+const LS_URL  = 'kavita_url';
+const LS_USER = 'kavita_username';
 
 function SeriesCard({ series, onImport, importing }: {
   series:    KavitaSeries;
@@ -15,8 +15,7 @@ function SeriesCard({ series, onImport, importing }: {
   const [imgErr, setImgErr] = useState(false);
 
   return (
-    <div className="group relative flex flex-col rounded-lg overflow-hidden border border-[var(--line)] bg-[var(--ink-raised)] hover:border-[var(--muted)] transition-colors">
-      {/* Cover */}
+    <div className="relative flex flex-col rounded-lg overflow-hidden border border-[var(--line)] bg-[var(--ink-raised)] hover:border-[var(--muted)] transition-colors">
       <div className="aspect-[2/3] bg-[var(--ink-sunken)] relative overflow-hidden">
         {!imgErr ? (
           <img
@@ -31,17 +30,9 @@ function SeriesCard({ series, onImport, importing }: {
           </div>
         )}
       </div>
-
-      {/* Info */}
       <div className="p-2.5 flex flex-col gap-2 flex-1">
         <p className="text-xs font-medium text-[var(--parchment)] line-clamp-2 leading-snug">{series.title}</p>
-        <Button
-          size="sm"
-          variant="primary"
-          loading={importing}
-          onClick={() => onImport(series)}
-          className="w-full mt-auto"
-        >
+        <Button size="sm" variant="primary" loading={importing} onClick={() => onImport(series)} className="w-full mt-auto">
           {importing ? 'Importing…' : 'Import'}
         </Button>
       </div>
@@ -52,24 +43,24 @@ function SeriesCard({ series, onImport, importing }: {
 export function KavitaBrowserPage() {
   const navigate = useNavigate();
 
-  const [url,    setUrl]    = useState(() => localStorage.getItem(LS_URL)    ?? 'http://192.168.0.11:5000');
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem(LS_KEY)    ?? '');
-  const [search, setSearch] = useState('');
-  const [ready,  setReady]  = useState(false);
+  const [url,      setUrl]      = useState(() => localStorage.getItem(LS_URL)  ?? 'http://192.168.0.11:5000');
+  const [username, setUsername] = useState(() => localStorage.getItem(LS_USER) ?? '');
+  const [password, setPassword] = useState('');
+  const [search,   setSearch]   = useState('');
+  const [ready,    setReady]    = useState(false);
   const [importingId, setImportingId] = useState<number | null>(null);
-  const [imported,    setImported]    = useState<Record<number, string>>({});  // seriesId → bookId
+  const [imported,    setImported]    = useState<Record<number, string>>({});
   const [toast, setToast] = useState<string | null>(null);
 
-  const { data: series, isLoading, error } = useKavitaBrowse(url, apiKey, ready);
+  const { data: series, isLoading, error } = useKavitaBrowse(url, username, password, ready);
   const importMutation = useKavitaImport();
 
-  // Persist credentials
-  useEffect(() => { if (url)    localStorage.setItem(LS_URL, url);    }, [url]);
-  useEffect(() => { if (apiKey) localStorage.setItem(LS_KEY, apiKey); }, [apiKey]);
+  useEffect(() => { if (url)      localStorage.setItem(LS_URL,  url);      }, [url]);
+  useEffect(() => { if (username) localStorage.setItem(LS_USER, username); }, [username]);
 
   const showToast = (msg: string) => {
     setToast(msg);
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3500);
   };
 
   const handleConnect = () => {
@@ -80,11 +71,11 @@ export function KavitaBrowserPage() {
   const handleImport = async (s: KavitaSeries) => {
     setImportingId(s.seriesId);
     try {
-      const book = await importMutation.mutateAsync({ url, apiKey, seriesId: s.seriesId });
+      const book = await importMutation.mutateAsync({ url, username, password, seriesId: s.seriesId });
       setImported(prev => ({ ...prev, [s.seriesId]: book.id }));
       showToast(`"${s.title}" added to your library`);
     } catch (e) {
-      showToast(`Failed to import: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      showToast(e instanceof Error ? e.message : 'Import failed');
     } finally {
       setImportingId(null);
     }
@@ -103,47 +94,56 @@ export function KavitaBrowserPage() {
           <button onClick={() => navigate(-1)} className="text-[var(--muted)] hover:text-[var(--parchment)] transition-colors text-sm">←</button>
           <div>
             <h1 className="text-lg font-semibold text-[var(--parchment)]">Import from Kavita</h1>
-            <p className="text-xs text-[var(--muted)]">Browse your Kavita library and import books to read here</p>
+            <p className="text-xs text-[var(--muted)]">Browse your home server and import books to read here</p>
           </div>
         </div>
 
         {/* Connection form */}
         <div className="rounded-xl border border-[var(--line)] bg-[var(--ink-raised)] p-4 space-y-3">
           <p className="text-xs text-[var(--muted)] uppercase tracking-widest">Kavita server</p>
-          <div className="flex gap-2 flex-wrap">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <input
               value={url}
               onChange={e => setUrl(e.target.value)}
               placeholder="http://192.168.0.11:5000"
-              className="flex-1 min-w-48 text-sm bg-[var(--ink-sunken)] border border-[var(--line)] rounded px-3 py-2 text-[var(--parchment)] placeholder-[var(--muted)] focus:border-[var(--gilt)] focus:outline-none"
+              className="text-sm bg-[var(--ink-sunken)] border border-[var(--line)] rounded px-3 py-2 text-[var(--parchment)] placeholder-[var(--muted)] focus:border-[var(--gilt)] focus:outline-none"
             />
             <input
-              value={apiKey}
-              onChange={e => setApiKey(e.target.value)}
-              type="password"
-              placeholder="API key (Kavita → Settings → Account → API Keys)"
-              className="flex-1 min-w-64 text-sm bg-[var(--ink-sunken)] border border-[var(--line)] rounded px-3 py-2 text-[var(--parchment)] placeholder-[var(--muted)] focus:border-[var(--gilt)] focus:outline-none"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              placeholder="Username"
+              autoComplete="username"
+              className="text-sm bg-[var(--ink-sunken)] border border-[var(--line)] rounded px-3 py-2 text-[var(--parchment)] placeholder-[var(--muted)] focus:border-[var(--gilt)] focus:outline-none"
             />
-            <Button variant="primary" onClick={handleConnect} loading={isLoading}>
-              {ready && series ? 'Refresh' : 'Connect'}
-            </Button>
+            <input
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              type="password"
+              placeholder="Password"
+              autoComplete="current-password"
+              onKeyDown={e => e.key === 'Enter' && handleConnect()}
+              className="text-sm bg-[var(--ink-sunken)] border border-[var(--line)] rounded px-3 py-2 text-[var(--parchment)] placeholder-[var(--muted)] focus:border-[var(--gilt)] focus:outline-none"
+            />
           </div>
+          <Button variant="primary" onClick={handleConnect} loading={isLoading} disabled={!url || !username || !password}>
+            {ready && series ? 'Refresh library' : 'Connect'}
+          </Button>
           {error && (
             <p className="text-xs text-[#b15539]">
-              {error instanceof Error ? error.message : 'Could not connect to Kavita — check URL and API key'}
+              {error instanceof Error ? error.message : 'Could not connect — check URL and credentials'}
             </p>
           )}
         </div>
 
-        {/* Library */}
+        {/* Library grid */}
         {series && (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search books…"
-                className="w-64 text-sm bg-[var(--ink-sunken)] border border-[var(--line)] rounded px-3 py-1.5 text-[var(--parchment)] placeholder-[var(--muted)] focus:border-[var(--gilt)] focus:outline-none"
+                placeholder="Search…"
+                className="w-56 text-sm bg-[var(--ink-sunken)] border border-[var(--line)] rounded px-3 py-1.5 text-[var(--parchment)] placeholder-[var(--muted)] focus:border-[var(--gilt)] focus:outline-none"
               />
               <p className="text-xs text-[var(--muted)] ml-auto">{filtered.length} book{filtered.length !== 1 ? 's' : ''}</p>
             </div>
@@ -154,11 +154,7 @@ export function KavitaBrowserPage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                 {filtered.map(s => (
                   <div key={s.seriesId} className="relative">
-                    <SeriesCard
-                      series={s}
-                      onImport={handleImport}
-                      importing={importingId === s.seriesId}
-                    />
+                    <SeriesCard series={s} onImport={handleImport} importing={importingId === s.seriesId} />
                     {imported[s.seriesId] && (
                       <div className="absolute inset-0 rounded-lg bg-[var(--ink-raised)]/90 flex flex-col items-center justify-center gap-2 p-2">
                         <span className="text-[var(--gilt)] text-lg">✓</span>
@@ -181,9 +177,8 @@ export function KavitaBrowserPage() {
         {/* Empty state */}
         {!ready && !series && (
           <div className="text-center py-16 space-y-2">
-            <p className="text-2xl opacity-20">📚</p>
-            <p className="text-sm text-[var(--muted)]">Enter your Kavita server URL and API key to browse your library</p>
-            <p className="text-xs text-[var(--muted)] opacity-60">Find your API key: Kavita → Settings → Account → API Keys</p>
+            <p className="text-3xl opacity-20">📚</p>
+            <p className="text-sm text-[var(--muted)]">Enter your Kavita server URL and login to browse your library</p>
           </div>
         )}
       </div>
