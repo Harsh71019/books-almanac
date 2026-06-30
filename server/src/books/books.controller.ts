@@ -1,7 +1,8 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, InternalServerErrorException, NotFoundException, Param, Patch, Post, Query, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { diskStorage } from 'multer';
+import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { resolveConfiguredPath } from '../common/utils/paths';
 import { BooksService } from './books.service';
@@ -105,9 +106,14 @@ export class BooksController {
   @Get(':id/epub/file')
   async serveEpub(@Param() params: ObjectIdParamDto, @Res() res: Response) {
     const { path, filename } = await this.booksService.getEpubFilePath(params.id);
+    await access(path).catch(() => {
+      throw new NotFoundException('Epub file not found on disk — try re-importing the book');
+    });
     res.setHeader('Content-Type', 'application/epub+zip');
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
     res.setHeader('Cache-Control', 'private, max-age=3600');
-    res.sendFile(path);
+    res.sendFile(path, (err) => {
+      if (err) throw new InternalServerErrorException('Failed to stream epub file');
+    });
   }
 }

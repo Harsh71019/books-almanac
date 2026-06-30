@@ -92,12 +92,23 @@ export class KavitaService {
     const chapterId = volumes[0]?.chapters?.[0]?.id;
     if (!chapterId) throw new BadRequestException('No readable chapter found for this series');
 
+    // Try JWT Authorization header first; fall back to apiKey query param
     const dlRes = await fetch(
-      `${url}/download/chapter?chapterId=${chapterId}&apiKey=${auth.apiKey}`
+      `${url}/api/download/chapter?chapterId=${chapterId}`,
+      { headers: { Authorization: `Bearer ${auth.jwt}` } }
     ).catch(() => { throw new BadGatewayException('Epub download from Kavita failed'); });
 
     if (!dlRes.ok) throw new BadGatewayException(`Kavita download failed: ${dlRes.status}`);
+
+    const contentType = dlRes.headers.get('content-type') ?? '';
     const epubBuffer = Buffer.from(await dlRes.arrayBuffer());
+
+    // Validate it's actually a zip/epub (magic bytes PK\x03\x04)
+    if (!epubBuffer.slice(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) {
+      throw new BadGatewayException(
+        `Kavita returned non-epub content (${contentType || 'unknown type'}) — check your Kavita version or chapter format`
+      );
+    }
 
     const coverUrl = await this.coverCache
       .cacheExternalCover(`${url}/api/image/series-cover?seriesId=${seriesId}&apiKey=${auth.apiKey}`)
