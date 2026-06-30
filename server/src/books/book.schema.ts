@@ -71,4 +71,4 @@ export const BookSchema = SchemaFactory.createForClass(Book);
 BookSchema.index({ finishedAt: -1 });
 BookSchema.index({ status: 1 });
 BookSchema.index({ genres: 1 });
-BookSchema.index({ title: 'text', authors: 'text' });
+BookSchema.index({ title: 'text', authors: 'text' }, { language_override: 'searchLang' });
