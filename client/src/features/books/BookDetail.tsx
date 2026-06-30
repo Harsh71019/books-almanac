@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { marked } from 'marked';
 import { Drawer, DrawerContent } from '@/components/ui/Drawer';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/Dialog';
@@ -28,6 +29,7 @@ export function BookDetail({ book, open, onClose }: BookDetailProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pageInput, setPageInput] = useState<string>('');
   const [pageSaved, setPageSaved] = useState(false);
+  const navigate = useNavigate();
   const update = useUpdateBook();
   const del = useDeleteBook();
 
@@ -194,6 +196,17 @@ export function BookDetail({ book, open, onClose }: BookDetailProps) {
                 dangerouslySetInnerHTML={{ __html: reviewHtml }}
               />
             </div>
+          )}
+
+          {/* Read button */}
+          {book.epubPath && (
+            <button
+              onClick={() => { onClose(); navigate(`/books/${book.id}/read`); }}
+              className="w-full py-2.5 rounded-lg text-sm font-medium transition-colors"
+              style={{ background: 'var(--gilt)', color: '#f3ecdf' }}
+            >
+              Read Now
+            </button>
           )}
 
           {/* Actions */}

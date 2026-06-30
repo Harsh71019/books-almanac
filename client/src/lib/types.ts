@@ -21,6 +21,9 @@ export interface Book {
   finishedAt: string | null;
   review: string | null;
   source: BookSource;
+  epubPath: string | null;
+  epubSize: number | null;
+  lastReadCfi: string | null;
   createdAt: string;
   updatedAt: string;
 }
