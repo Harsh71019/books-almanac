@@ -1,9 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, SortOrder } from 'mongoose';
+import { unlink } from 'node:fs/promises';
+import { join } from 'node:path';
 import { BookQueryDto, CreateBookDto, UpdateBookDto } from './dto';
 import { Book, BookDocument } from './book.schema';
 import { startOfNextYear, startOfYear, toDateOrNull } from '../common/utils/date';
+import { resolveConfiguredPath } from '../common/utils/paths';
 import { normaliseGenre } from '@reading-almanac/shared';
 import { CoverCacheService } from '../uploads/cover-cache.service';
 
@@ -69,6 +72,36 @@ export class BooksService {
     return { ok: true };
   }
 
+  async attachEpub(id: string, epubPath: string, epubSize: number) {
+    const book = await this.bookModel
+      .findByIdAndUpdate(id, { $set: { epubPath, epubSize } }, { new: true })
+      .lean()
+      .exec();
+    if (!book) throw new NotFoundException('Book not found');
+    return this.toResponse(book);
+  }
+
+  async removeEpub(id: string) {
+    const book = await this.bookModel.findById(id).lean().exec();
+    if (!book) throw new NotFoundException('Book not found');
+
+    if (book.epubPath) {
+      const uploadDir = resolveConfiguredPath(process.env.UPLOAD_DIR ?? 'uploads');
+      const fullPath = join(uploadDir, book.epubPath);
+      await unlink(fullPath).catch(() => undefined);
+    }
+
+    const updated = await this.bookModel
+      .findByIdAndUpdate(
+        id,
+        { $set: { epubPath: null, epubSize: null, lastReadCfi: null } },
+        { new: true }
+      )
+      .lean()
+      .exec();
+    return this.toResponse(updated!);
+  }
+
   async exportAll() {
     const books = await this.bookModel.find().sort({ createdAt: 1 }).lean().exec();
     return {
@@ -119,6 +152,9 @@ export class BooksService {
       finishedAt: book.finishedAt ?? null,
       review: book.review ?? null,
       source: book.source,
+      epubPath: book.epubPath ?? null,
+      epubSize: book.epubSize ?? null,
+      lastReadCfi: book.lastReadCfi ?? null,
       createdAt: book.createdAt,
       updatedAt: book.updatedAt
     };

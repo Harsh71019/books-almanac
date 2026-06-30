@@ -1,7 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
+import { diskStorage } from 'multer';
+import { join } from 'node:path';
+import { resolveConfiguredPath } from '../common/utils/paths';
 import { BooksService } from './books.service';
 import { BookQueryDto, CreateBookDto, ObjectIdParamDto, UpdateBookDto } from './dto';
+
+const epubUploadDir = () =>
+  join(resolveConfiguredPath(process.env.UPLOAD_DIR ?? 'uploads'), 'epubs');
 
 @Controller('books')
 export class BooksController {
@@ -43,5 +50,35 @@ export class BooksController {
   @Delete(':id')
   remove(@Param() params: ObjectIdParamDto) {
     return this.booksService.remove(params.id);
+  }
+
+  @Post(':id/epub')
+  @UseInterceptors(
+    FileInterceptor('epub', {
+      storage: diskStorage({
+        destination: (_req, _file, cb) => cb(null, epubUploadDir()),
+        filename: (req, _file, cb) => cb(null, `${req.params.id}.epub`)
+      }),
+      limits: { fileSize: 100 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        const isEpub =
+          file.mimetype === 'application/epub+zip' ||
+          file.originalname.toLowerCase().endsWith('.epub');
+        if (!isEpub) {
+          cb(new BadRequestException('File must be an EPUB (.epub)'), false);
+          return;
+        }
+        cb(null, true);
+      }
+    })
+  )
+  uploadEpub(@Param() params: ObjectIdParamDto, @UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('EPUB file is required');
+    return this.booksService.attachEpub(params.id, `epubs/${params.id}.epub`, file.size);
+  }
+
+  @Delete(':id/epub')
+  removeEpub(@Param() params: ObjectIdParamDto) {
+    return this.booksService.removeEpub(params.id);
   }
 }
