@@ -17,6 +17,7 @@ import { UsersModule } from './users/users.module';
 import { ApiExceptionFilter } from './common/filters/api-exception.filter';
 import { HealthModule } from './health/health.module';
 import { ReadingSessionsModule } from './reading-sessions/reading-sessions.module';
+import { KavitaModule } from './kavita/kavita.module';
 import { resolveConfiguredPath } from './common/utils/paths';
 
 @Module({
@@ -71,7 +72,8 @@ import { resolveConfiguredPath } from './common/utils/paths';
     StatsModule,
     SettingsModule,
     HealthModule,
-    ReadingSessionsModule
+    ReadingSessionsModule,
+    KavitaModule
   ],
   providers: [
     {
