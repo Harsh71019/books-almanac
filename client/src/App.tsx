@@ -19,7 +19,8 @@ const YearPage      = lazy(() => import('./pages/Year').then((m) => ({ default: 
 const SettingsPage  = lazy(() => import('./pages/Settings').then((m) => ({ default: m.SettingsPage })));
 const AddBookPage   = lazy(() => import('./pages/AddBook').then((m) => ({ default: m.AddBookPage })));
 const StreaksPage   = lazy(() => import('./pages/Streaks').then((m) => ({ default: m.StreaksPage })));
-const ReaderPage    = lazy(() => import('./pages/Reader').then((m) => ({ default: m.ReaderPage })));
+const ReaderPage        = lazy(() => import('./pages/Reader').then((m) => ({ default: m.ReaderPage })));
+const KavitaBrowserPage = lazy(() => import('./pages/KavitaBrowser').then((m) => ({ default: m.KavitaBrowserPage })));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -73,6 +74,7 @@ function ProtectedRoutes() {
                 <Route path="/add"       element={<AddBookPage />} />
                 <Route path="/settings"  element={<SettingsPage />} />
                 <Route path="/books/:id/read" element={<ReaderPage />} />
+                <Route path="/kavita"        element={<KavitaBrowserPage />} />
                 <Route path="*"          element={<Navigate to="/" replace />} />
               </Routes>
             </motion.div>

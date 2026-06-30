@@ -9,6 +9,7 @@ const NAV = [
   { to: '/streaks',   label: 'Streaks',     dot: '#cf7d4a' },
   { to: '/year',      label: 'Statistics',  dot: '#6f9a86' },
   { to: '/add',       label: 'Add a Book',  dot: '#d8a13a' },
+  { to: '/kavita',    label: 'Kavita',      dot: '#7a9bbf' },
 ];
 
 const BOTTOM_NAV = [

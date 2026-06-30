@@ -194,6 +194,36 @@ export function useStreaks() {
   });
 }
 
+/* ── Kavita ── */
+
+export interface KavitaSeries {
+  seriesId: number;
+  title:    string;
+  coverUrl: string;
+  format:   number;
+}
+
+export function useKavitaBrowse(url: string, apiKey: string, enabled: boolean) {
+  return useQuery<KavitaSeries[]>({
+    queryKey: ['kavita', 'browse', url, apiKey],
+    queryFn:  () => api.post('/kavita/browse', { url, apiKey }),
+    enabled:  enabled && !!url && !!apiKey,
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
+export function useKavitaImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { url: string; apiKey: string; seriesId: number }) =>
+      api.post<Book>('/kavita/import', payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['books'] });
+    }
+  });
+}
+
 /* ── Settings ── */
 
 export function useSettings() {
