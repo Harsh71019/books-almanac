@@ -1,6 +1,7 @@
 node_modules
 server/dist
 shared/dist
+client/dist
 .env
 uploads
 .DS_Store

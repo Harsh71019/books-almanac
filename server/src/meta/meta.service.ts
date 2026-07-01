@@ -32,7 +32,7 @@ export class MetaService {
     url.searchParams.set('maxResults', '10');
 
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
       if (!response.ok) throw new Error(`Google Books returned ${response.status}`);
       const data = (await response.json()) as GoogleBooksResponse;
 
@@ -44,7 +44,10 @@ export class MetaService {
           authors: volume.authors ?? [],
           coverUrl: this.httpsCover(volume.imageLinks?.thumbnail ?? volume.imageLinks?.smallThumbnail),
           isbn13: volume.industryIdentifiers?.find((id) => id.type === 'ISBN_13')?.identifier ?? null,
-          publishedYear: volume.publishedDate ? parseInt(volume.publishedDate.slice(0, 4), 10) || null : null,
+          publishedYear: volume.publishedDate ? (() => {
+            const parsed = parseInt(volume.publishedDate.slice(0, 4), 10);
+            return Number.isFinite(parsed) && parsed >= 1 && parsed <= 2100 ? parsed : null;
+          })() : null,
           pageCount: volume.pageCount ?? null,
           genres: mapCategoriesToGenres(volume.categories ?? []),
           language: volume.language ?? null,
@@ -63,7 +66,7 @@ export class MetaService {
     url.searchParams.set('fields', 'title,author_name,isbn,cover_i,first_publish_year,number_of_pages_median,language,subject');
 
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
       if (!response.ok) throw new Error(`Open Library returned ${response.status}`);
       const data = (await response.json()) as OpenLibraryResponse;
 

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ReadingSession, ReadingSessionDocument } from './reading-session.schema';
@@ -6,8 +6,15 @@ import { CreateSessionDto, SessionQueryDto, UpdateSessionDto } from './dto';
 
 /** Normalise a YYYY-MM-DD string to UTC midnight Date */
 function toUtcDay(dateStr: string): Date {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    throw new BadRequestException('Invalid date format, expected YYYY-MM-DD');
+  }
   const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d));
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (Number.isNaN(date.getTime())) {
+    throw new BadRequestException('Invalid date');
+  }
+  return date;
 }
 
 @Injectable()
@@ -81,12 +88,15 @@ export class ReadingSessionsService {
   }
 
   private toResponse(s: Partial<ReadingSession> & { _id?: unknown; createdAt?: Date }) {
+    const dateStr = s.date instanceof Date
+      ? s.date.toISOString().slice(0, 10)
+      : s.date
+        ? String(s.date).slice(0, 10)
+        : null;
     return {
       id: String(s._id),
-      date: s.date instanceof Date
-        ? s.date.toISOString().slice(0, 10)
-        : String(s.date).slice(0, 10),
-      pagesRead: s.pagesRead,
+      date: dateStr,
+      pagesRead: s.pagesRead ?? 0,
       bookId: s.bookId ? String(s.bookId) : null,
       note: s.note ?? null
     };

@@ -175,12 +175,19 @@ export const bookBaseSchema = z.object({
   finishedAt: nullableDate,
   review: z.string().trim().max(20000).nullable().optional(),
   source: z.enum(BOOK_SOURCES).default('manual'),
-  epubPath: z.string().nullable().optional(),
+  hasEpub: z.boolean().default(false),
   epubSize: z.number().int().min(0).nullable().optional(),
   lastReadCfi: z.string().nullable().optional()
 });
 
 export const createBookSchema = bookBaseSchema.superRefine((book, ctx) => {
+  if (book.currentPage != null && book.pageCount != null && book.currentPage > book.pageCount) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['currentPage'],
+      message: 'currentPage cannot exceed pageCount'
+    });
+  }
   if (book.startedAt && book.finishedAt && Date.parse(book.startedAt) > Date.parse(book.finishedAt)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -191,6 +198,13 @@ export const createBookSchema = bookBaseSchema.superRefine((book, ctx) => {
 });
 
 export const updateBookSchema = bookBaseSchema.partial().superRefine((book, ctx) => {
+  if (book.currentPage != null && book.pageCount != null && book.currentPage > book.pageCount) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['currentPage'],
+      message: 'currentPage cannot exceed pageCount'
+    });
+  }
   if (book.startedAt && book.finishedAt && Date.parse(book.startedAt) > Date.parse(book.finishedAt)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -213,6 +227,20 @@ export const bookQuerySchema = z.object({
     .default('recently_finished'),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(500).default(24)
+});
+
+export const kavitaCredentialsSchema = z.object({
+  url: z.string().trim().url('Must be a valid URL'),
+  username: z.string().trim().min(1, 'Username is required'),
+  password: z.string().min(1, 'Password is required')
+});
+
+export const kavitaImportSchema = kavitaCredentialsSchema.extend({
+  seriesId: z.number().int().min(0, 'Series ID must be a non-negative integer')
+});
+
+export const overviewQuerySchema = z.object({
+  year: z.coerce.number().int().min(1900).max(3000).optional()
 });
 
 export const metaSearchQuerySchema = z.object({

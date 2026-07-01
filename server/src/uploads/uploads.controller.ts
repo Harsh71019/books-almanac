@@ -3,10 +3,17 @@ import { ConfigService } from '@nestjs/config';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'node:path';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 import { resolveConfiguredPath } from '../common/utils/paths';
 import { CoverCacheService } from './cover-cache.service';
 
 const allowedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+const cacheCoverSchema = z.object({
+  url: z.string().trim().url('Must be a valid URL').max(2000)
+});
+class CacheCoverDto extends createZodDto(cacheCoverSchema) {}
 
 @Controller('uploads')
 export class UploadsController {
@@ -44,9 +51,8 @@ export class UploadsController {
   }
 
   @Post('cache-cover')
-  async cacheCover(@Body() body: { url?: string }) {
-    if (!body.url) throw new BadRequestException('url is required');
-    const url = await this.coverCache.cacheExternalCover(body.url);
+  async cacheCover(@Body() dto: CacheCoverDto) {
+    const url = await this.coverCache.cacheExternalCover(dto.url);
     return { url };
   }
 }

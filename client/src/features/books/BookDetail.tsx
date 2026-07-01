@@ -199,7 +199,7 @@ export function BookDetail({ book, open, onClose }: BookDetailProps) {
           )}
 
           {/* Read button */}
-          {book.epubPath && (
+          {book.hasEpub && (
             <button
               onClick={() => { onClose(); navigate(`/books/${book.id}/read`); }}
               className="w-full py-2.5 rounded-lg text-sm font-medium transition-colors"

@@ -1,5 +1,5 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
-import { YearParamDto } from './dto';
+import { YearParamDto, OverviewQueryDto } from './dto';
 import { StatsService } from './stats.service';
 
 @Controller('stats')
@@ -7,8 +7,8 @@ export class StatsController {
   constructor(private readonly statsService: StatsService) {}
 
   @Get('overview')
-  overview(@Query('year') year?: string) {
-    return this.statsService.overview(year ? parseInt(year, 10) : undefined);
+  overview(@Query() query: OverviewQueryDto) {
+    return this.statsService.overview(query.year);
   }
 
   @Get('years')

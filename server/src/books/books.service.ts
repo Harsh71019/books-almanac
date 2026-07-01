@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, SortOrder } from 'mongoose';
 import { unlink } from 'node:fs/promises';
@@ -12,6 +12,8 @@ import { CoverCacheService } from '../uploads/cover-cache.service';
 
 @Injectable()
 export class BooksService {
+  private readonly logger = new Logger(BooksService.name);
+
   constructor(
     @InjectModel(Book.name) private readonly bookModel: Model<BookDocument>,
     private readonly coverCacheService: CoverCacheService
@@ -51,7 +53,6 @@ export class BooksService {
   }
 
   async update(id: string, dto: UpdateBookDto) {
-    await this.assertExists(id);
     const normalized = this.normalizeDates(dto);
     const withGenres = normalized.genres
       ? { ...normalized, genres: normalized.genres.map(normaliseGenre) }
@@ -101,7 +102,8 @@ export class BooksService {
       .findByIdAndUpdate(id, { $set: update }, { new: true })
       .lean()
       .exec();
-    return this.toResponse(updated!);
+    if (!updated) throw new NotFoundException('Book not found');
+    return this.toResponse(updated);
   }
 
   async getEpubFilePath(id: string) {
@@ -134,7 +136,8 @@ export class BooksService {
       )
       .lean()
       .exec();
-    return this.toResponse(updated!);
+    if (!updated) throw new NotFoundException('Book not found');
+    return this.toResponse(updated);
   }
 
   async exportAll() {
@@ -187,7 +190,7 @@ export class BooksService {
       finishedAt: book.finishedAt ?? null,
       review: book.review ?? null,
       source: book.source,
-      epubPath: book.epubPath ?? null,
+      hasEpub: !!book.epubPath,
       epubSize: book.epubSize ?? null,
       lastReadCfi: book.lastReadCfi ?? null,
       createdAt: book.createdAt,
@@ -202,7 +205,12 @@ export class BooksService {
     if (query.format) filter.format = query.format;
     if (query.language) filter.language = query.language;
     if (query.author) filter.authors = { $regex: query.author, $options: 'i' };
-    if (query.q) filter.$text = { $search: query.q };
+    if (query.q) {
+      filter.$or = [
+        { title: { $regex: query.q, $options: 'i' } },
+        { authors: { $regex: query.q, $options: 'i' } }
+      ];
+    }
     if (query.year) {
       const start = startOfYear(query.year);
       const end = startOfNextYear(query.year);
@@ -241,10 +249,13 @@ export class BooksService {
 
   private async cacheCover<T extends Partial<Book>>(book: T): Promise<T> {
     if (!book.coverUrl) return book;
-    return {
-      ...book,
-      coverUrl: await this.coverCacheService.cacheExternalCover(book.coverUrl)
-    };
+    try {
+      const coverUrl = await this.coverCacheService.cacheExternalCover(book.coverUrl);
+      return { ...book, coverUrl };
+    } catch (error) {
+      this.logger.warn({ error, coverUrl: book.coverUrl }, 'Cover caching failed, using original URL');
+      return book;
+    }
   }
 
   private applyStatusDateNudges<T extends Partial<Book>>(book: T): T {
@@ -258,8 +269,5 @@ export class BooksService {
     return book;
   }
 
-  private async assertExists(id: string) {
-    const exists = await this.bookModel.exists({ _id: id });
-    if (!exists) throw new NotFoundException('Book not found');
-  }
+
 }

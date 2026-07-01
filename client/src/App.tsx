@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, useIsFetching } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AuthProvider, useAuth } from '@/features/auth/AuthContext';
@@ -38,9 +38,12 @@ function PageSpinner() {
 
 function ProtectedRoutes() {
   const { user, isLoading } = useAuth();
+  // Guard against the window where persisted cache has null but a background
+  // refetch is in-flight (e.g. stale cached null from a previous logout).
+  const authFetching = useIsFetching({ queryKey: ['me'] });
   const location = useLocation();
 
-  if (isLoading) {
+  if (isLoading || authFetching > 0) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'radial-gradient(120% 120% at 80% 0%, #f3ecdf 0%, #ece2cf 55%, #e6dbc4 100%)' }}>
         <span className="size-6 border-2 border-[var(--gilt)] border-t-transparent rounded-full animate-spin" />
@@ -113,6 +116,12 @@ export default function App() {
           shouldDehydrateQuery: (query) =>
             query.state.status === 'success' && shouldPersistQuery(query.queryKey)
         }
+      }}
+      onSuccess={() => {
+        // After cache restoration, reset the auth query so it always starts
+        // fresh — prevents a stale cached null from a previous logout from
+        // triggering a premature redirect before the /me check completes.
+        queryClient.resetQueries({ queryKey: ['me'] });
       }}
     >
       {app}

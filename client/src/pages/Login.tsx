@@ -1,10 +1,16 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/AuthContext';
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, user, isLoading } = useAuth();
   const navigate = useNavigate();
+
+  // If already authenticated (e.g. after a background refetch completes while
+  // we were briefly on this page), send them home.
+  useEffect(() => {
+    if (!isLoading && user) navigate('/', { replace: true });
+  }, [user, isLoading, navigate]);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');

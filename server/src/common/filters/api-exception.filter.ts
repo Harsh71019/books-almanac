@@ -6,6 +6,7 @@ import {
   HttpStatus
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { PinoLogger } from 'nestjs-pino';
 import { ZodValidationException } from 'nestjs-zod';
 
@@ -20,50 +21,67 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
-    const status =
-      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+    let code = 'HTTP_500';
+    let message = 'Something went wrong';
+    let details: unknown = undefined;
 
-    const code = this.codeFor(status);
-    const message = this.messageFor(exception, status);
+    if (exception instanceof ZodValidationException) {
+      status = HttpStatus.BAD_REQUEST;
+      code = 'VALIDATION_ERROR';
+      message = 'Request validation failed';
+      details = exception.getZodError().errors.map((e) => ({
+        field: e.path.join('.'),
+        message: e.message
+      }));
+    } else if (exception instanceof HttpException) {
+      status = exception.getStatus();
+      code = `HTTP_${status}`;
+      message = this.extractMessage(exception);
+    } else if (exception instanceof mongoose.Error.CastError) {
+      status = HttpStatus.BAD_REQUEST;
+      code = 'INVALID_ID';
+      message = `Invalid value for ${exception.path}`;
+    } else if (exception instanceof mongoose.Error.ValidationError) {
+      status = HttpStatus.BAD_REQUEST;
+      code = 'VALIDATION_ERROR';
+      message = Object.values(exception.errors)
+        .map((e) => e.message)
+        .join(', ');
+    } else if (exception instanceof TypeError && (exception as any).code === 'ERR_INVALID_URL') {
+      status = HttpStatus.BAD_REQUEST;
+      code = 'INVALID_URL';
+      message = 'Invalid URL provided';
+    }
 
     if (status >= 500) {
       this.logger.error(
         { err: exception, path: request.url, method: request.method, status },
         'Unhandled API exception'
       );
+    } else {
+      this.logger.warn(
+        { path: request.url, method: request.method, status, code, message },
+        'Client error'
+      );
     }
 
     response.status(status).json({
       error: {
         code,
-        message
+        message,
+        ...(details ? { details } : {})
       }
     });
   }
 
-  private messageFor(exception: unknown, status: number): string {
-    if (exception instanceof ZodValidationException) {
-      return 'Request validation failed';
+  private extractMessage(exception: HttpException): string {
+    const response = exception.getResponse();
+    if (typeof response === 'string') return response;
+    if (typeof response === 'object' && response && 'message' in response) {
+      const message = (response as { message: string | string[] }).message;
+      return Array.isArray(message) ? message.join(', ') : message;
     }
-
-    if (exception instanceof HttpException) {
-      const response = exception.getResponse();
-      if (typeof response === 'string') return response;
-      if (typeof response === 'object' && response && 'message' in response) {
-        const message = (response as { message: string | string[] }).message;
-        return Array.isArray(message) ? message.join(', ') : message;
-      }
-      return exception.message;
-    }
-
-    if (status >= 500) {
-      return 'Something went wrong';
-    }
-
-    return 'Request failed';
-  }
-
-  private codeFor(status: number): string {
-    return `HTTP_${status}`;
+    return exception.message;
   }
 }

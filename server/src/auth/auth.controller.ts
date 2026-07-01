@@ -1,5 +1,4 @@
-import { Body, Controller, Get, Post, Res } from '@nestjs/common';
-import { Response } from 'express';
+import { Body, Controller, Get, Post } from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UsersService } from '../users/users.service';
@@ -11,18 +10,18 @@ import { LoginDto } from './dto';
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
-    private readonly usersService: UsersService
+    private readonly usersService: UsersService,
   ) {}
 
   @Public()
   @Post('login')
-  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) response: Response) {
-    return this.authService.login(dto, response);
+  login(@Body() dto: LoginDto) {
+    return this.authService.login(dto);
   }
 
   @Post('logout')
-  logout(@Res({ passthrough: true }) response: Response) {
-    return this.authService.logout(response);
+  logout() {
+    return this.authService.logout();
   }
 
   @Get('me')

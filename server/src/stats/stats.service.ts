@@ -463,13 +463,31 @@ export class StatsService {
       .sort((a, b) => a.days - b.days)[0] ?? null;
   }
 
-  private leanBook(b: unknown): unknown {
-    const d = b as Record<string, unknown>;
+  private leanBook(b: any) {
     return {
-      ...d,
-      id: String(d._id),
-      authors: (d.authors as string[] | undefined) ?? [],
-      genres:  (d.genres  as string[] | undefined) ?? [],
+      id: String(b._id),
+      title: b.title,
+      authors: b.authors ?? [],
+      coverUrl: b.coverUrl ?? null,
+      isbn13: b.isbn13 ?? null,
+      publishedYear: b.publishedYear ?? null,
+      genres: b.genres ?? [],
+      pageCount: b.pageCount ?? null,
+      currentPage: b.currentPage ?? null,
+      language: b.language ?? null,
+      format: b.format,
+      status: b.status,
+      rating: b.rating ?? null,
+      favorite: b.favorite ?? false,
+      startedAt: b.startedAt ?? null,
+      finishedAt: b.finishedAt ?? null,
+      review: b.review ?? null,
+      source: b.source,
+      hasEpub: !!b.epubPath,
+      epubSize: b.epubSize ?? null,
+      lastReadCfi: b.lastReadCfi ?? null,
+      createdAt: b.createdAt,
+      updatedAt: b.updatedAt
     };
   }
 

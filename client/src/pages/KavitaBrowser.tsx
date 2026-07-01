@@ -45,7 +45,7 @@ export function KavitaBrowserPage() {
 
   const [url,      setUrl]      = useState(() => localStorage.getItem(LS_URL)  ?? 'http://192.168.0.11:5000');
   const [username, setUsername] = useState(() => localStorage.getItem(LS_USER) ?? '');
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState(() => import.meta.env.VITE_KAVITA_DEFAULT_PASSWORD ?? '');
   const [search,   setSearch]   = useState('');
   const [ready,    setReady]    = useState(false);
   const [importingId, setImportingId] = useState<number | null>(null);

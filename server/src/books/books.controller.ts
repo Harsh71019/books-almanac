@@ -1,8 +1,9 @@
-import { BadRequestException, Body, Controller, Delete, Get, InternalServerErrorException, NotFoundException, Param, Patch, Post, Query, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, InternalServerErrorException, Logger, NotFoundException, Param, Patch, Post, Query, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { diskStorage } from 'multer';
 import { access } from 'node:fs/promises';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveConfiguredPath } from '../common/utils/paths';
 import { BooksService } from './books.service';
@@ -14,6 +15,8 @@ const epubUploadDir = () =>
 
 @Controller('books')
 export class BooksController {
+  private readonly logger = new Logger(BooksController.name);
+
   constructor(
     private readonly booksService: BooksService,
     private readonly sessionsService: ReadingSessionsService
@@ -61,7 +64,11 @@ export class BooksController {
   @UseInterceptors(
     FileInterceptor('epub', {
       storage: diskStorage({
-        destination: (_req, _file, cb) => cb(null, epubUploadDir()),
+        destination: (_req, _file, cb) => {
+          const dest = epubUploadDir();
+          mkdirSync(dest, { recursive: true });
+          cb(null, dest);
+        },
         filename: (req, _file, cb) => cb(null, `${req.params.id}.epub`)
       }),
       limits: { fileSize: 100 * 1024 * 1024 },
@@ -94,7 +101,6 @@ export class BooksController {
 
   @Post(':id/epub-session')
   async createEpubSession(@Param() params: ObjectIdParamDto, @Body() dto: EpubSessionDto) {
-    if (dto.pagesRead < 1 || dto.durationSeconds < 30) return { ok: true };
     return this.sessionsService.create({
       date:      dto.date,
       pagesRead: dto.pagesRead,
@@ -113,7 +119,13 @@ export class BooksController {
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
     res.setHeader('Cache-Control', 'private, max-age=3600');
     res.sendFile(path, (err) => {
-      if (err) throw new InternalServerErrorException('Failed to stream epub file');
+      if (err) {
+        if (!res.headersSent) {
+          res.status(500).json({ error: { code: 'HTTP_500', message: 'Failed to stream epub file' } });
+        } else {
+          this.logger.error({ err, path: params.id }, 'Epub stream error (headers already sent)');
+        }
+      }
     });
   }
 }

@@ -1,11 +1,42 @@
 services:
-  app:
-    build: .
-    container_name: reading-almanac
-    env_file:
-      - .env
-    ports:
-      - "${PORT:-4000}:4000"
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    image: books-app-server
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      COOKIE_SECURE: "false"
+      UPLOAD_DIR: uploads
+      CLIENT_BUILD_DIR: client/dist
     volumes:
       - ./uploads:/app/uploads
+    networks:
+      - books-app-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  client:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    image: books-app-client
     restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3003}:80"
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      - books-app-net
+
+networks:
+  books-app-net:
+    driver: bridge

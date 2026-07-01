@@ -7,7 +7,11 @@
     "build": "nest build",
     "start:prod": "node dist/main.js",
     "lint": "eslint \"src/**/*.ts\"",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage",
+    "test:e2e": "jest --config ./test/jest-e2e.config.ts --runInBand"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.3",
@@ -35,14 +39,21 @@
   "devDependencies": {
     "@nestjs/cli": "^11.0.7",
     "@nestjs/schematics": "^11.0.5",
+    "@nestjs/testing": "^11.1.27",
     "@types/bcrypt": "^5.0.2",
     "@types/cookie-parser": "^1.4.9",
     "@types/express": "^5.0.3",
+    "@types/jest": "^30.0.0",
     "@types/multer": "^1.4.13",
     "@types/node": "^24.0.4",
     "@types/passport-jwt": "^4.0.1",
+    "@types/supertest": "^7.2.0",
     "eslint": "^9.29.0",
+    "jest": "^30.4.2",
+    "mongodb-memory-server": "^11.2.0",
     "pino-pretty": "^13.0.0",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.11",
     "typescript": "^5.8.3"
   }
 }

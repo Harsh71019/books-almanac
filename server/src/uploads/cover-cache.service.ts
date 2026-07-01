@@ -34,7 +34,8 @@ export class CoverCacheService {
       const response = await fetch(url, {
         headers: {
           accept: 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5'
-        }
+        },
+        signal: AbortSignal.timeout(10_000)
       });
 
       if (!response.ok) {
@@ -54,11 +55,22 @@ export class CoverCacheService {
         return coverUrl;
       }
 
-      const bytes = Buffer.from(await response.arrayBuffer());
-      if (bytes.length > MAX_COVER_BYTES) {
-        this.logger.warn({ coverUrl, size: bytes.length }, 'Cover download exceeded max size');
+      if (!response.body) {
+        this.logger.warn({ coverUrl }, 'Empty response body');
         return coverUrl;
       }
+
+      const chunks: Buffer[] = [];
+      let totalSize = 0;
+      for await (const chunk of response.body as any) {
+        totalSize += chunk.length;
+        if (totalSize > MAX_COVER_BYTES) {
+          this.logger.warn({ coverUrl, size: totalSize }, 'Cover download exceeded max size during stream');
+          return coverUrl;
+        }
+        chunks.push(Buffer.from(chunk));
+      }
+      const bytes = Buffer.concat(chunks);
 
       const uploadDir = resolveConfiguredPath(this.config.getOrThrow<string>('UPLOAD_DIR'));
       const coversDir = join(uploadDir, 'covers');
