@@ -66,6 +66,19 @@ describe('ApiExceptionFilter', () => {
     });
   });
 
+  it('should handle standard HttpException with object string message', () => {
+    const exception = new HttpException({ message: 'User not found' }, HttpStatus.NOT_FOUND);
+    filter.catch(exception, hostMock);
+
+    expect(responseMock.status).toHaveBeenCalledWith(HttpStatus.NOT_FOUND);
+    expect(responseMock.json).toHaveBeenCalledWith({
+      error: {
+        code: 'HTTP_404',
+        message: 'User not found'
+      }
+    });
+  });
+
   it('should handle standard HttpException with empty object message', () => {
     const exception = new HttpException({}, HttpStatus.BAD_REQUEST);
     filter.catch(exception, hostMock);

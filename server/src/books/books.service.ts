@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, SortOrder } from 'mongoose';
+import { existsSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { BookQueryDto, CreateBookDto, UpdateBookDto } from './dto';
@@ -29,8 +30,14 @@ export class BooksService {
       this.bookModel.countDocuments(filter).exec()
     ]);
 
+    const responses = items.map((book) => this.toResponse(book));
+    // epubPath in the DB doesn't guarantee the file is still on disk (e.g. a
+    // manual cleanup or interrupted import can orphan the reference) — when a
+    // caller explicitly asked for readable-in-app books, don't hand back dead ones.
+    const filtered = query.hasEpub === true ? responses.filter((b) => b.hasEpub) : responses;
+
     return {
-      items: items.map((book) => this.toResponse(book)),
+      items: filtered,
       page: query.page,
       limit: query.limit,
       total,
@@ -44,6 +51,11 @@ export class BooksService {
     const withCachedCover = await this.cacheCover(withGenres);
     const book = await this.bookModel.create(this.applyStatusDateNudges(withCachedCover));
     return this.toResponse(book.toObject());
+  }
+
+  async findByKavitaSeriesId(seriesId: number) {
+    const book = await this.bookModel.findOne({ kavitaSeriesId: seriesId }).lean().exec();
+    return book ? this.toResponse(book) : null;
   }
 
   async findOne(id: string) {
@@ -190,9 +202,10 @@ export class BooksService {
       finishedAt: book.finishedAt ?? null,
       review: book.review ?? null,
       source: book.source,
-      hasEpub: !!book.epubPath,
+      hasEpub: this.epubFileExists(book.epubPath),
       epubSize: book.epubSize ?? null,
       lastReadCfi: book.lastReadCfi ?? null,
+      kavitaSeriesId: book.kavitaSeriesId ?? null,
       createdAt: book.createdAt,
       updatedAt: book.updatedAt
     };
@@ -204,6 +217,7 @@ export class BooksService {
     if (query.genre) filter.genres = query.genre;
     if (query.format) filter.format = query.format;
     if (query.language) filter.language = query.language;
+    if (query.hasEpub != null) filter.epubPath = query.hasEpub ? { $ne: null } : null;
     if (query.author) filter.authors = { $regex: query.author, $options: 'i' };
     if (query.q) {
       filter.$or = [
@@ -269,5 +283,9 @@ export class BooksService {
     return book;
   }
 
-
+  private epubFileExists(epubPath: string | null | undefined): boolean {
+    if (!epubPath) return false;
+    const uploadDir = resolveConfiguredPath(process.env.UPLOAD_DIR ?? 'uploads');
+    return existsSync(join(uploadDir, epubPath));
+  }
 }

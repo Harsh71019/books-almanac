@@ -13,6 +13,13 @@ export class KavitaController {
     return this.kavitaService.browse(url, auth);
   }
 
+  @Post('libraries')
+  async libraries(@Body() dto: KavitaCredentialsDto) {
+    const url = dto.url.replace(/\/$/, '');
+    const auth = await this.kavitaService.login(url, dto.username, dto.password);
+    return this.kavitaService.getLibraries(url, auth);
+  }
+
   @Post('import')
   async import(@Body() dto: KavitaImportDto) {
     const url = dto.url.replace(/\/$/, '');

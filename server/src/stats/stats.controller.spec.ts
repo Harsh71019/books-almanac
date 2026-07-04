@@ -55,7 +55,12 @@ describe('StatsController', () => {
   });
 
   it('streaks should delegate to service', () => {
-    controller.streaks();
-    expect(serviceMock.streaks).toHaveBeenCalled();
+    controller.streaks({});
+    expect(serviceMock.streaks).toHaveBeenCalledWith(undefined);
+  });
+
+  it('streaks should pass through a requested year', () => {
+    controller.streaks({ year: 2022 });
+    expect(serviceMock.streaks).toHaveBeenCalledWith(2022);
   });
 });

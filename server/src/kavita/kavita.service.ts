@@ -15,15 +15,24 @@ const kavitaSeriesItemSchema = z.object({
   id: z.number(),
   name: z.string().optional().nullable(),
   localizedName: z.string().optional().nullable(),
-  format: z.number().optional().nullable()
+  format: z.number().optional().nullable(),
+  libraryId: z.number().optional().nullable()
 });
 
 const kavitaBrowseResponseSchema = z.array(kavitaSeriesItemSchema).or(z.object({
   series: z.array(kavitaSeriesItemSchema).optional()
 }));
 
+const kavitaLibraryItemSchema = z.object({
+  id: z.number(),
+  name: z.string()
+});
+
+const kavitaLibrariesResponseSchema = z.array(kavitaLibraryItemSchema);
+
 const kavitaSeriesDetailSchema = z.object({
-  name: z.string().optional().nullable()
+  name: z.string().optional().nullable(),
+  format: z.number().optional().nullable()
 });
 
 const kavitaMetadataSchema = z.object({
@@ -36,11 +45,28 @@ const kavitaVolumesSchema = z.array(z.object({
   chapters: z.array(z.object({ id: z.number() })).optional().nullable()
 })).optional().nullable();
 
+// Kavita's own MangaFormat enum
+const KAVITA_FORMAT_LABELS: Record<number, string> = {
+  0: 'unknown',
+  1: 'comic',
+  2: 'archive',
+  3: 'epub',
+  4: 'pdf',
+};
+const KAVITA_EPUB_FORMAT = 3;
+
 export interface KavitaSeries {
-  seriesId: number;
-  title:    string;
-  coverUrl: string;
-  format:   number;
+  seriesId:    number;
+  title:       string;
+  coverUrl:    string;
+  format:      number;
+  formatLabel: string;
+  libraryId:   number | null;
+}
+
+export interface KavitaLibrary {
+  id:   number;
+  name: string;
 }
 
 interface KavitaAuth {
@@ -92,14 +118,36 @@ export class KavitaService {
     const list = Array.isArray(parsed.data) ? parsed.data : (parsed.data.series ?? []);
 
     return list.map((s) => ({
-      seriesId: s.id,
-      title:    s.name ?? s.localizedName ?? 'Unknown',
-      coverUrl: `${url}/api/image/series-cover?seriesId=${s.id}&apiKey=${auth.apiKey}`,
-      format:   s.format ?? 0,
+      seriesId:    s.id,
+      title:       s.name ?? s.localizedName ?? 'Unknown',
+      coverUrl:    `${url}/api/image/series-cover?seriesId=${s.id}&apiKey=${auth.apiKey}`,
+      format:      s.format ?? 0,
+      formatLabel: KAVITA_FORMAT_LABELS[s.format ?? 0] ?? 'unknown',
+      libraryId:   s.libraryId ?? null,
     }));
   }
 
+  async getLibraries(url: string, auth: KavitaAuth): Promise<KavitaLibrary[]> {
+    const res = await fetch(`${url}/api/library/libraries`, {
+      headers: { Authorization: `Bearer ${auth.jwt}` },
+      signal: AbortSignal.timeout(10_000)
+    }).catch(() => { throw new BadGatewayException(`Cannot reach Kavita at ${url}`); });
+
+    if (!res.ok) throw new BadGatewayException(`Kavita library list failed: ${res.status}`);
+
+    const json = await res.json();
+    const parsed = kavitaLibrariesResponseSchema.safeParse(json);
+    if (!parsed.success) throw new BadGatewayException('Unexpected Kavita library list response');
+
+    return parsed.data.map((l) => ({ id: l.id, name: l.name }));
+  }
+
   async import(url: string, auth: KavitaAuth, seriesId: number) {
+    // Idempotent: re-importing a series you already have just hands back what's there,
+    // instead of creating another duplicate book.
+    const existing = await this.booksService.findByKavitaSeriesId(seriesId);
+    if (existing) return existing;
+
     const [seriesRes, metaRes] = await Promise.all([
       fetch(`${url}/api/series/${seriesId}`,                     { headers: { Authorization: `Bearer ${auth.jwt}` }, signal: AbortSignal.timeout(10_000) }),
       fetch(`${url}/api/series/metadata?seriesId=${seriesId}`,   { headers: { Authorization: `Bearer ${auth.jwt}` }, signal: AbortSignal.timeout(10_000) })
@@ -109,6 +157,16 @@ export class KavitaService {
     const seriesJson = await seriesRes.json();
     const seriesParsed = kavitaSeriesDetailSchema.safeParse(seriesJson);
     if (!seriesParsed.success) throw new BadGatewayException('Invalid Kavita series response');
+
+    // Fail fast on non-epub series when Kavita tells us the format up front — avoids a
+    // full volume/chapter/download round-trip just to hit the magic-byte check below.
+    // If this field isn't present on this endpoint, we just fall through to that check.
+    const declaredFormat = seriesParsed.data.format;
+    if (declaredFormat != null && declaredFormat !== KAVITA_EPUB_FORMAT) {
+      throw new BadRequestException(
+        `This series is a ${KAVITA_FORMAT_LABELS[declaredFormat] ?? 'non-epub'} in Kavita, not an epub — it can't be read in this app`
+      );
+    }
 
     const metaJson = metaRes.ok ? await metaRes.json() : {};
     const metaParsed = kavitaMetadataSchema.safeParse(metaJson);
@@ -134,6 +192,12 @@ export class KavitaService {
     const chapterId = volumes[0]?.chapters?.[0]?.id;
     if (!chapterId) throw new BadRequestException('No readable chapter found for this series');
 
+    // Only the first chapter of the first volume is imported — fine for a standalone
+    // novel (the common case), but a multi-part work would silently lose everything
+    // after part 1. Surface that instead of hiding it.
+    const totalChapters = volumes.reduce((n, v) => n + (v.chapters?.length ?? 0), 0);
+    const partialImport = totalChapters > 1;
+
     const dlRes = await fetch(
       `${url}/api/download/chapter?chapterId=${chapterId}`,
       { headers: { Authorization: `Bearer ${auth.jwt}` }, signal: AbortSignal.timeout(120_000) }
@@ -158,16 +222,18 @@ export class KavitaService {
       title,
       authors,
       genres,
-      format:   'ebook',
-      status:   'want_to_read',
-      source:   'manual',
-      review:   summary,
-      coverUrl: coverUrl ?? null,
+      format:         'ebook',
+      status:         'want_to_read',
+      source:         'manual',
+      review:         summary,
+      coverUrl:       coverUrl ?? null,
+      kavitaSeriesId: seriesId,
     } as Parameters<typeof this.booksService.create>[0]);
 
     const uploadDir = resolveConfiguredPath(process.env.UPLOAD_DIR ?? 'uploads');
     const epubPath  = `epubs/${book.id}.epub`;
     await writeFile(join(uploadDir, epubPath), epubBuffer);
-    return this.booksService.attachEpub(book.id, epubPath, epubBuffer.length);
+    const attached = await this.booksService.attachEpub(book.id, epubPath, epubBuffer.length);
+    return { ...attached, partialImport };
   }
 }

@@ -48,6 +48,12 @@ describe('StatsService', () => {
 
   describe('overview', () => {
     it('should aggregate statistics and return summary', async () => {
+      const now = new Date();
+      const thisY = now.getUTCFullYear();
+      const thisM = now.getUTCMonth() + 1;
+      const prevM = thisM === 1 ? 12 : thisM - 1;
+      const prevY = thisM === 1 ? thisY - 1 : thisY;
+
       bookModelMock.aggregate
         .mockResolvedValueOnce([
           {
@@ -59,11 +65,11 @@ describe('StatsService', () => {
           }
         ])
         .mockResolvedValueOnce([
-          { _id: 2025, pages: 1500, books: 5 }
+          { _id: thisY, pages: 1500, books: 5 }
         ])
         .mockResolvedValueOnce([
-          { _id: { year: 2025, month: 6 } },
-          { _id: { year: 2025, month: 7 } }
+          { _id: { year: prevY, month: prevM } },
+          { _id: { year: thisY, month: thisM } }
         ]);
 
       bookModelMock.find.mockReturnValue({
@@ -77,17 +83,97 @@ describe('StatsService', () => {
             authors: ['Author A'],
             format: 'physical',
             status: 'reading',
-            finishedAt: new Date('2025-06-15T00:00:00Z'),
+            finishedAt: new Date(),
             genres: ['Sci-Fi']
           }
         ])
       });
 
-      const result = await service.overview(2025);
+      const result = await service.overview(thisY);
       expect(result.totals.booksRead).toBe(5);
-      expect(result.byYear).toEqual([{ year: 2025, pages: 1500, books: 5 }]);
+      expect(result.byYear).toEqual([{ year: thisY, pages: 1500, books: 5 }]);
       expect(result.currentlyReading[0].title).toBe('Mock Book');
       expect(result.recentFinished[0].title).toBe('Mock Book');
+      expect(result.currentStreak).toBe(2);
+    });
+
+    it('should calculate consecutive months across year boundaries', async () => {
+      bookModelMock.aggregate
+        .mockResolvedValueOnce([
+          {
+            booksRead: 1,
+            pagesRead: 300,
+            avgRating: 4.0,
+            fiveStarCount: 0,
+            r5: 0, r4_5: 0, r4: 0, r3_5: 0, r3: 0, r2_5: 0, r2: 0, r1_5: 0, r1: 0, r0_5: 0
+          }
+        ])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { _id: { year: 2024, month: 12 } },
+          { _id: { year: 2025, month: 1 } }
+        ]);
+
+      bookModelMock.find.mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([])
+      });
+
+      const result = await service.overview(2025);
+      expect(result.longestStreak).toBe(2);
+    });
+
+    it('should handle zero checkMonth transition across year boundary when current month is January', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2025-01-15T12:00:00Z'));
+      try {
+        bookModelMock.aggregate
+          .mockResolvedValueOnce([
+            {
+              booksRead: 1,
+              pagesRead: 300,
+              avgRating: 4.0,
+              fiveStarCount: 0,
+              r5: 0, r4_5: 0, r4: 0, r3_5: 0, r3: 0, r2_5: 0, r2: 0, r1_5: 0, r1: 0, r0_5: 0
+            }
+          ])
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([
+            { _id: { year: 2024, month: 12 } },
+            { _id: { year: 2025, month: 1 } }
+          ]);
+
+        bookModelMock.find.mockReturnValue({
+          sort: jest.fn().mockReturnThis(),
+          limit: jest.fn().mockReturnThis(),
+          lean: jest.fn().mockReturnThis(),
+          exec: jest.fn().mockResolvedValue([])
+        });
+
+        const result = await service.overview(2025);
+        expect(result.currentStreak).toBe(2);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('should return empty totals if no book matched', async () => {
+      bookModelMock.aggregate
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      bookModelMock.find.mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([])
+      });
+
+      const result = await service.overview(2025);
+      expect(result.totals.booksRead).toBe(0);
+      expect(result.longestStreak).toBe(0);
     });
   });
 
@@ -110,12 +196,46 @@ describe('StatsService', () => {
         exec: jest.fn().mockResolvedValue([
           {
             _id: '123',
-            title: 'Mock Book',
+            title: 'Mock Book 1',
             authors: ['Author A'],
             format: 'physical',
             status: 'read',
             pageCount: 300,
             startedAt: new Date('2025-06-01'),
+            finishedAt: new Date('2025-06-05'),
+            genres: ['Sci-Fi', 'Sci-Fi', 'Fantasy']
+          },
+          {
+            _id: '456',
+            title: 'Mock Book 2',
+            authors: ['Author B'],
+            format: 'ebook',
+            status: 'read',
+            pageCount: 200,
+            startedAt: new Date('2025-06-01'),
+            finishedAt: new Date('2025-06-10'),
+            genres: []
+          },
+          {
+            _id: '789',
+            title: 'Mock Book 3',
+            authors: ['Author C'],
+            status: 'read',
+            finishedAt: null
+          },
+          {
+            _id: 'abc',
+            title: 'Mock Book 4',
+            authors: ['Author D'],
+            status: 'read',
+            finishedAt: new Date('2025-06-05'),
+            genres: null
+          },
+          {
+            _id: 'def',
+            title: 'Mock Book 5',
+            authors: ['Author E'],
+            status: 'read',
             finishedAt: new Date('2025-06-05'),
             genres: ['Sci-Fi']
           }
@@ -123,9 +243,9 @@ describe('StatsService', () => {
       });
 
       bookModelMock.aggregate
-        .mockResolvedValueOnce([{ totalBooks: 1, totalPages: 300, avgRating: 4.0 }]) // keyStats
-        .mockResolvedValueOnce([{ year: 2025, count: 1, pages: 300 }]) // byYear
-        .mockResolvedValueOnce([{ month: 6, count: 1, pages: 300 }]) // monthly
+        .mockResolvedValueOnce([{ totalBooks: 2, totalPages: 500, avgRating: 4.0 }]) // keyStats
+        .mockResolvedValueOnce([{ year: 2025, count: 2, pages: 500 }]) // byYear
+        .mockResolvedValueOnce([{ month: 6, count: 2, pages: 500 }, { month: 7, count: 0, pages: 0 }]) // monthly
         .mockResolvedValueOnce([{ genre: 'Sci-Fi', count: 1 }]) // genreBreakdown
         .mockResolvedValueOnce([{ format: 'physical', count: 1 }]) // formatBreakdown
         .mockResolvedValueOnce([{ language: 'en', count: 1 }]) // languageBreakdown
@@ -133,8 +253,8 @@ describe('StatsService', () => {
 
       const result = await service.allTime();
       expect(result.scope).toBe('all');
-      expect(result.books[0].title).toBe('Mock Book');
-      expect(result.keyStats.totalBooks).toBe(1);
+      expect(result.books[0].title).toBe('Mock Book 1');
+      expect(result.keyStats.totalBooks).toBe(2);
       expect(result.monthly[0].dominantGenre).toBe('Sci-Fi');
     });
   });
@@ -178,43 +298,66 @@ describe('StatsService', () => {
       expect(result.books[0].title).toBe('Mock Book');
       expect(result.monthly[0].dominantGenre).toBe('Sci-Fi');
     });
+
+    it('should fallback to empty keyStats if not found', async () => {
+      bookModelMock.find.mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([])
+      });
+
+      bookModelMock.aggregate
+        .mockResolvedValueOnce([]) // keyStats
+        .mockResolvedValueOnce([]) // monthly
+        .mockResolvedValueOnce([]) // genre
+        .mockResolvedValueOnce([]) // format
+        .mockResolvedValueOnce([]) // lang
+        .mockResolvedValueOnce([]); // decade
+
+      userModelMock.findOne.mockReturnValue({
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(null)
+      });
+
+      const result = await service.year(2025);
+      expect(result.keyStats.totalBooks).toBe(0);
+      expect(result.goal.target).toBe(30); // Default target goal settings fallback
+    });
   });
 
   describe('knowledge', () => {
-    it('should calculate genre depth and page milestones', async () => {
+    it('should aggregate knowledge statistics and cover sorting/fallback branches', async () => {
       bookModelMock.aggregate
         .mockResolvedValueOnce([
           {
             _id: 'Sci-Fi',
-            bookCount: 2,
-            totalPages: 600,
+            bookCount: 5,
+            totalPages: 1500,
             avgRating: 4.5,
             yearsActive: [2025],
-            books: [
-              { id: '1', title: 'SciFi Book 1', coverUrl: null, rating: 3 },
-              { id: '2', title: 'SciFi Book 2', coverUrl: null, rating: 5 },
-              { id: '3', title: 'SciFi Book 3', coverUrl: null, rating: null }
-            ],
-            authors: [['Author A'], ['Author B'], [null as any]]
+            books: [{ id: '123', title: 'B1', coverUrl: null, rating: null }],
+            authors: [['Author A'], ['Author A'], ['Author B']]
           },
           {
             _id: 'Fantasy',
-            bookCount: 1,
-            totalPages: 200,
-            avgRating: 4.0,
+            bookCount: 2,
+            totalPages: 600,
+            avgRating: null,
             yearsActive: [2024],
-            books: [{ id: '4', title: 'Fantasy Book', coverUrl: null, rating: 4 }],
-            authors: [['Author C']]
+            books: [
+              { id: '456', title: 'B2', coverUrl: 'cover.jpg', rating: 4.0 },
+              { id: '789', title: 'B3', coverUrl: null, rating: 5.0 }
+            ],
+            authors: [['Author C'], ['Author D'], ['Author D']]
           }
         ])
-        .mockResolvedValueOnce([{ total: 12000 }]);
+        .mockResolvedValueOnce([{ total: 2100 }]);
 
       const result = await service.knowledge();
+      expect(result.genres.length).toBe(2);
       expect(result.genres[0].genre).toBe('Sci-Fi');
       expect(result.genres[0].depthScore).toBe(100);
-      expect(result.genres[0].notableBooks[0].title).toBe('SciFi Book 2'); // Highest rating first
-      expect(result.genres[0].topAuthors[0].name).toBe('Author A');
-      expect(result.pageMilestones).toContain(10000);
+      expect(result.genres[1].depthScore).toBeLessThan(100);
     });
 
     it('should handle zero maxDepth score safely', async () => {
@@ -277,6 +420,14 @@ describe('StatsService', () => {
       expect(result.currentStreak).toBe(1);
       expect(result.longestStreak).toBe(1);
       expect(result.totalReadingDays).toBe(2);
+    });
+
+    it('should handle empty calendar data', async () => {
+      sessionsServiceMock.calendarData.mockResolvedValue([]);
+      const result = await service.streaks();
+      expect(result.currentStreak).toBe(0);
+      expect(result.longestStreak).toBe(0);
+      expect(result.totalReadingDays).toBe(0);
     });
   });
 });

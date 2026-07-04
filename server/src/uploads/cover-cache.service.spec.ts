@@ -191,5 +191,54 @@ describe('CoverCacheService', () => {
       const result = await service.cacheExternalCover('https://example.com/cover-endpoint');
       expect(result).toMatch(/\.png$/);
     });
+
+    it('should ignore EEXIST error when writing cover file', async () => {
+      const mockBuffer = Buffer.from('fake-image-bytes');
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'image/jpeg',
+          'content-length': String(mockBuffer.length)
+        }),
+        body: {
+          [Symbol.asyncIterator]: async function* () {
+            yield mockBuffer;
+          }
+        }
+      });
+      
+      const err = new Error('File exists') as any;
+      err.code = 'EEXIST';
+      (globalThis as any).mockWriteFileError = err;
+
+      const result = await service.cacheExternalCover('https://example.com/exist.jpg');
+      expect(result).toMatch(/^\/uploads\/covers\/cover-[a-f0-9]{24}\.jpg$/);
+    });
+
+    it('should map .jpeg extension to .jpg', async () => {
+      const mockBuffer = Buffer.from('fake-image-bytes');
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'image/jpeg',
+          'content-length': String(mockBuffer.length)
+        }),
+        body: {
+          [Symbol.asyncIterator]: async function* () {
+            yield mockBuffer;
+          }
+        }
+      });
+
+      const result = await service.cacheExternalCover('https://example.com/valid-cover.jpeg');
+      expect(result).toMatch(/\.jpg$/);
+    });
+
+    it('should fallback to .jpg in extensionFor if content-type is missing from map', () => {
+      const ext = (service as any).extensionFor('image/gif', new URL('https://example.com/cover'));
+      expect(ext).toBe('.jpg');
+    });
   });
 });

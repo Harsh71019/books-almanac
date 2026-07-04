@@ -6,6 +6,11 @@ import { CoverCacheService } from '../uploads/cover-cache.service';
 import { NotFoundException } from '@nestjs/common';
 import { buildBook, randomObjectId } from '../../test/helpers/factories';
 
+// hasEpub now verifies the file is actually on disk (not just that epubPath
+// is set) — these are pure business-logic unit tests, so treat any epubPath
+// as present rather than touching the real filesystem.
+jest.mock('node:fs', () => ({ existsSync: jest.fn(() => true) }));
+
 describe('BooksService', () => {
   let service: BooksService;
   let bookModelMock: any;
@@ -91,6 +96,54 @@ describe('BooksService', () => {
 
       expect(coverCacheMock.cacheExternalCover).not.toHaveBeenCalled();
     });
+
+    it('should catch error and log warning when coverCache fails', async () => {
+      const bookData = buildBook({ coverUrl: 'http://example.com/cover.jpg' });
+      const bookDoc = {
+        _id: randomObjectId(),
+        ...bookData,
+        toObject: () => ({ _id: '123', ...bookData })
+      };
+      
+      coverCacheMock.cacheExternalCover.mockRejectedValue(new Error('Fetch failed'));
+      bookModelMock.create.mockResolvedValue(bookDoc);
+
+      const result = await service.create(bookData as any);
+      expect(result).toBeDefined();
+      expect(coverCacheMock.cacheExternalCover).toHaveBeenCalled();
+    });
+
+    it('should nudge finishedAt if status is read and finishedAt is missing', async () => {
+      const bookData = buildBook({ status: 'read', finishedAt: null });
+      const bookDoc = {
+        _id: randomObjectId(),
+        ...bookData,
+        toObject: () => ({ _id: '123', ...bookData })
+      };
+      bookModelMock.create.mockResolvedValue(bookDoc);
+
+      await service.create(bookData as any);
+      expect(bookModelMock.create).toHaveBeenCalledWith(expect.objectContaining({
+        status: 'read',
+        finishedAt: expect.any(Date)
+      }));
+    });
+
+    it('should nudge startedAt if status is reading and startedAt is missing', async () => {
+      const bookData = buildBook({ status: 'reading', startedAt: null });
+      const bookDoc = {
+        _id: randomObjectId(),
+        ...bookData,
+        toObject: () => ({ _id: '123', ...bookData })
+      };
+      bookModelMock.create.mockResolvedValue(bookDoc);
+
+      await service.create(bookData as any);
+      expect(bookModelMock.create).toHaveBeenCalledWith(expect.objectContaining({
+        status: 'reading',
+        startedAt: expect.any(Date)
+      }));
+    });
   });
 
   describe('findOne', () => {
@@ -159,6 +212,8 @@ describe('BooksService', () => {
         author: 'Yuval',
         q: 'sapiens',
         year: 2025,
+        format: 'physical',
+        language: 'en',
         sort: 'recently_finished'
       });
 
@@ -244,6 +299,21 @@ describe('BooksService', () => {
       expect(result.status).toBe('reading');
     });
 
+    it('should not transition status if progress percentage is 0', async () => {
+      const id = randomObjectId();
+      const bookDoc = { _id: id, title: 'B', status: 'want_to_read' };
+      const updatedDoc = { _id: id, title: 'B', status: 'want_to_read' };
+
+      bookModelMock.findById.mockReturnValue({
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(bookDoc)
+      });
+      bookModelMock.findByIdAndUpdate().lean().exec.mockResolvedValue(updatedDoc);
+
+      const result = await service.saveEpubProgress(id, 'cfi', 0, 0);
+      expect(result.status).toBe('want_to_read');
+    });
+
     it('should throw NotFoundException if book is missing', async () => {
       const id = randomObjectId();
       bookModelMock.findById.mockReturnValue({
@@ -279,6 +349,25 @@ describe('BooksService', () => {
       expect(result.path.endsWith('epubs/1.epub')).toBe(true);
       expect(result.filename).toBe('B.epub');
     });
+
+    it('should throw NotFoundException if book not found', async () => {
+      const id = randomObjectId();
+      bookModelMock.findById.mockReturnValue({
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(null)
+      });
+      await expect(service.getEpubFilePath(id)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException if epubPath is missing', async () => {
+      const id = randomObjectId();
+      const bookDoc = { _id: id, title: 'B', epubPath: null };
+      bookModelMock.findById.mockReturnValue({
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(bookDoc)
+      });
+      await expect(service.getEpubFilePath(id)).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('removeEpub', () => {
@@ -295,6 +384,41 @@ describe('BooksService', () => {
 
       const result = await service.removeEpub(id);
       expect(result.hasEpub).toBe(false);
+    });
+
+    it('should skip file deletion if epubPath is missing', async () => {
+      const id = randomObjectId();
+      const bookDoc = { _id: id, title: 'B', epubPath: null };
+      const updatedDoc = { _id: id, title: 'B', epubPath: null };
+
+      bookModelMock.findById.mockReturnValue({
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(bookDoc)
+      });
+      bookModelMock.findByIdAndUpdate().lean().exec.mockResolvedValue(updatedDoc);
+
+      const result = await service.removeEpub(id);
+      expect(result.hasEpub).toBe(false);
+    });
+
+    it('should throw NotFoundException if book not found during removeEpub', async () => {
+      const id = randomObjectId();
+      bookModelMock.findById.mockReturnValue({
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(null)
+      });
+      await expect(service.removeEpub(id)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException if findByIdAndUpdate returns null during removeEpub', async () => {
+      const id = randomObjectId();
+      const bookDoc = { _id: id, title: 'B', epubPath: 'p' };
+      bookModelMock.findById.mockReturnValue({
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(bookDoc)
+      });
+      bookModelMock.findByIdAndUpdate().lean().exec.mockResolvedValue(null);
+      await expect(service.removeEpub(id)).rejects.toThrow(NotFoundException);
     });
   });
 

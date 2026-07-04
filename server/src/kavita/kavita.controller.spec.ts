@@ -10,7 +10,8 @@ describe('KavitaController', () => {
     kavitaServiceMock = {
       login: jest.fn().mockResolvedValue({ jwt: 'j', apiKey: 'a' }),
       browse: jest.fn().mockResolvedValue([]),
-      import: jest.fn().mockResolvedValue({ id: '123' })
+      import: jest.fn().mockResolvedValue({ id: '123' }),
+      getLibraries: jest.fn().mockResolvedValue([])
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -40,5 +41,13 @@ describe('KavitaController', () => {
     expect(kavitaServiceMock.login).toHaveBeenCalledWith('http://k', 'u', 'p');
     expect(kavitaServiceMock.import).toHaveBeenCalledWith('http://k', { jwt: 'j', apiKey: 'a' }, 1);
     expect(res).toEqual({ id: '123' });
+  });
+
+  it('libraries should login and fetch libraries', async () => {
+    const body = { url: 'http://k', username: 'u', password: 'p' };
+    const res = await controller.libraries(body);
+    expect(kavitaServiceMock.login).toHaveBeenCalledWith('http://k', 'u', 'p');
+    expect(kavitaServiceMock.getLibraries).toHaveBeenCalledWith('http://k', { jwt: 'j', apiKey: 'a' });
+    expect(res).toEqual([]);
   });
 });

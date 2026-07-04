@@ -4,6 +4,42 @@ import { BooksService } from './books.service';
 import { ReadingSessionsService } from '../reading-sessions/reading-sessions.service';
 import { buildBook } from '../../test/helpers/factories';
 import * as fs from 'node:fs/promises';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+
+jest.mock('@nestjs/platform-express', () => {
+  const actual = jest.requireActual('@nestjs/platform-express');
+  return {
+    ...actual,
+    FileInterceptor: jest.fn().mockImplementation((fieldName, options) => {
+      (globalThis as any).mockBooksFileInterceptorOptions = options;
+      return actual.FileInterceptor(fieldName, options);
+    })
+  };
+});
+
+jest.mock('multer', () => {
+  const mockMulter = jest.fn().mockImplementation(() => {
+    return {
+      single: () => jest.fn()
+    };
+  });
+  (mockMulter as any).diskStorage = jest.fn().mockImplementation((options) => {
+    (globalThis as any).mockMulterDiskStorageOptions = options;
+    return {
+      _handleFile: jest.fn(),
+      _removeFile: jest.fn()
+    };
+  });
+  return mockMulter;
+});
+
+jest.mock('node:fs', () => {
+  const actual = jest.requireActual('node:fs');
+  return {
+    ...actual,
+    mkdirSync: jest.fn()
+  };
+});
 
 describe('BooksController', () => {
   let controller: BooksController;
@@ -122,6 +158,36 @@ describe('BooksController', () => {
     expect(jsonMock).toHaveBeenCalled();
   });
 
+  it('serveEpub should log error and not return status 500 if headers already sent', async () => {
+    const jsonMock = jest.fn();
+    const statusMock = jest.fn().mockReturnValue({ json: jsonMock });
+    const resMock = {
+      sendFile: jest.fn().mockImplementation((path, cb) => cb(new Error('Send failed'))),
+      setHeader: jest.fn(),
+      headersSent: true,
+      status: statusMock
+    } as any;
+    
+    await controller.serveEpub({ id: '507f1f77bcf86cd799439011' }, resMock);
+    expect(statusMock).not.toHaveBeenCalled();
+  });
+
+  it('serveEpub should throw NotFoundException if file does not exist on disk', async () => {
+    booksServiceMock.getEpubFilePath.mockResolvedValue({
+      path: '/nonexistent/file.epub',
+      filename: 'file.epub'
+    });
+
+    const resMock = {
+      sendFile: jest.fn(),
+      setHeader: jest.fn()
+    } as any;
+
+    await expect(
+      controller.serveEpub({ id: '507f1f77bcf86cd799439011' }, resMock)
+    ).rejects.toThrow(NotFoundException);
+  });
+
   it('saveProgress should delegate to booksService', async () => {
     const dto = { cfi: 'cfi', percentage: 50, estimatedPage: 10 };
     await controller.saveProgress({ id: '507f1f77bcf86cd799439011' }, dto);
@@ -143,6 +209,12 @@ describe('BooksController', () => {
     );
   });
 
+  it('uploadEpub should throw BadRequestException if file is missing', () => {
+    expect(() =>
+      controller.uploadEpub({ id: '507f1f77bcf86cd799439011' }, undefined as any)
+    ).toThrow(BadRequestException);
+  });
+
   it('createEpubSession should delegate to sessionsService', async () => {
     const dto = { date: '2025-06-15', pagesRead: 30, durationSeconds: 120 };
     await controller.createEpubSession({ id: '507f1f77bcf86cd799439011' }, dto);
@@ -151,6 +223,52 @@ describe('BooksController', () => {
       pagesRead: 30,
       bookId: '507f1f77bcf86cd799439011',
       note: null
+    });
+  });
+
+  describe('epub fileFilter', () => {
+    it('should allow EPUB mimetype or extension', () => {
+      const options = (globalThis as any).mockBooksFileInterceptorOptions;
+      expect(options).toBeDefined();
+      expect(options.fileFilter).toBeDefined();
+
+      const callback = jest.fn();
+      // Test mimetype application/epub+zip
+      options.fileFilter(null, { mimetype: 'application/epub+zip', originalname: 'book.epub' }, callback);
+      expect(callback).toHaveBeenCalledWith(null, true);
+
+      // Test extension endsWith .epub
+      callback.mockClear();
+      options.fileFilter(null, { mimetype: 'application/octet-stream', originalname: 'book.EPUB' }, callback);
+      expect(callback).toHaveBeenCalledWith(null, true);
+
+      // Test invalid file
+      callback.mockClear();
+      options.fileFilter(null, { mimetype: 'application/pdf', originalname: 'book.pdf' }, callback);
+      expect(callback).toHaveBeenCalledWith(expect.any(BadRequestException), false);
+    });
+  });
+
+  describe('epub diskStorage', () => {
+    it('should configure destination and filename correctly', () => {
+      const originalUploadDir = process.env.UPLOAD_DIR;
+      delete process.env.UPLOAD_DIR;
+      try {
+        const options = (globalThis as any).mockMulterDiskStorageOptions;
+        expect(options).toBeDefined();
+        expect(options.destination).toBeDefined();
+        expect(options.filename).toBeDefined();
+
+        const cbDest = jest.fn();
+        options.destination(null, null, cbDest);
+        expect(cbDest).toHaveBeenCalledWith(null, expect.any(String));
+
+        const cbFile = jest.fn();
+        options.filename({ params: { id: 'book-123' } }, null, cbFile);
+        expect(cbFile).toHaveBeenCalledWith(null, 'book-123.epub');
+      } finally {
+        process.env.UPLOAD_DIR = originalUploadDir;
+      }
     });
   });
 });

@@ -32,7 +32,7 @@ export class StatsController {
   }
 
   @Get('streaks')
-  streaks() {
-    return this.statsService.streaks();
+  streaks(@Query() query: OverviewQueryDto) {
+    return this.statsService.streaks(query.year);
   }
 }

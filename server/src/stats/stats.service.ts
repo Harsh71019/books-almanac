@@ -615,9 +615,11 @@ export class StatsService {
     return streak;
   }
 
-  async streaks() {
+  async streaks(year?: number) {
     const now = new Date();
-    // Calendar covers 371 days back (53 weeks) so the heatmap always starts on a Sunday
+    // Calendar covers 371 days back (53 weeks) so the heatmap always starts on a Sunday.
+    // This rolling window is what current/longest streak and the headline totals are
+    // computed from — those are "your standing right now," not tied to a browsed year.
     const fromDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 370));
     const toDate   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
@@ -649,7 +651,14 @@ export class StatsService {
       prev = day;
     }
 
-    return { currentStreak, longestStreak, totalReadingDays, totalPagesLogged, calendar };
+    // The heatmap itself can be browsed by any calendar year — the rolling 371-day
+    // window above only ever covers the trailing ~12 months from today, so a
+    // requested past year needs its own dedicated fetch rather than reusing it.
+    const displayCalendar = year != null
+      ? await this.sessionsService.calendarData(new Date(Date.UTC(year, 0, 1)), new Date(Date.UTC(year, 11, 31)))
+      : calendar;
+
+    return { currentStreak, longestStreak, totalReadingDays, totalPagesLogged, calendar: displayCalendar };
   }
 
   private prevDay(dateStr: string): string {

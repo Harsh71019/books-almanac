@@ -108,4 +108,21 @@ describe('UploadsController', () => {
       expect(callback).toHaveBeenCalledWith(expect.any(BadRequestException), false);
     });
   });
+
+  describe('multer destination fallback', () => {
+    it('should fallback to uploads when UPLOAD_DIR env is missing', () => {
+      const originalUploadDir = process.env.UPLOAD_DIR;
+      delete process.env.UPLOAD_DIR;
+      try {
+        jest.isolateModules(() => {
+          require('./uploads.controller');
+        });
+        const mockStorageOptions = (globalThis as any).mockStorageOptions;
+        expect(mockStorageOptions).toBeDefined();
+        expect(mockStorageOptions.destination).toBeDefined();
+      } finally {
+        process.env.UPLOAD_DIR = originalUploadDir;
+      }
+    });
+  });
 });
