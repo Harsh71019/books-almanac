@@ -53,4 +53,3 @@ ssh root@192.168.0.226 "docker image prune -a -f"
 
 - `.env` lives only on the server at `/opt/apps/books-app/.env` — never committed
 - Source files are synced via `scp`, not `git pull` — the server has no git remote
-- `COOKIE_SECURE=false` must stay `false` while running over plain HTTP

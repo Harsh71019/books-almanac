@@ -64,16 +64,13 @@ export function useDeleteBook() {
 export function useSaveEpubProgress() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { id: string; cfi: string; percentage: number; estimatedPage: number | null }) => {
-      console.log('[reader] PATCH epub-progress →', payload);
-      return api.patch<Book>(`/books/${payload.id}/epub-progress`, {
+    mutationFn: (payload: { id: string; cfi: string; percentage: number; estimatedPage: number | null }) =>
+      api.patch<Book>(`/books/${payload.id}/epub-progress`, {
         cfi: payload.cfi,
         percentage: payload.percentage,
         estimatedPage: payload.estimatedPage
-      });
-    },
+      }),
     onSuccess: (book) => {
-      console.log('[reader] epub-progress saved ✓', { id: book.id, lastReadCfi: book.lastReadCfi, status: book.status, currentPage: book.currentPage });
       qc.setQueryData(['book', book.id], book);
       qc.invalidateQueries({ queryKey: ['books'] });
       // status can auto-transition (want_to_read → reading → read) here, which
@@ -89,16 +86,13 @@ export function useSaveEpubProgress() {
 export function useLogEpubSession() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { id: string; pagesRead: number; durationSeconds: number; date: string }) => {
-      console.log('[reader] POST epub-session →', payload);
-      return api.post(`/books/${payload.id}/epub-session`, {
+    mutationFn: (payload: { id: string; pagesRead: number; durationSeconds: number; date: string }) =>
+      api.post(`/books/${payload.id}/epub-session`, {
         pagesRead: payload.pagesRead,
         durationSeconds: payload.durationSeconds,
         date: payload.date
-      });
-    },
-    onSuccess: (res) => {
-      console.log('[reader] epub-session logged ✓', res);
+      }),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sessions'] });
       // Broad ['stats'] — the Statistics page (useYearStats/useAllTimeStats) lives
       // under ['stats','all'|'year',...], which the narrower streaks/overview keys
@@ -143,14 +137,7 @@ export function useMetaSearch(q: string) {
 export function useOverview(year?: number | null) {
   return useQuery<Overview>({
     queryKey: ['stats', 'overview', year ?? null],
-    queryFn: () => {
-      const url = `/stats/overview${year ? `?year=${year}` : ''}`;
-      console.log('[stats] GET', url);
-      return api.get<Overview>(url).then((res) => {
-        console.log('[stats] overview result', res);
-        return res;
-      });
-    },
+    queryFn: () => api.get<Overview>(`/stats/overview${year ? `?year=${year}` : ''}`),
     staleTime: 2 * 60_000
   });
 }
@@ -174,14 +161,7 @@ export function useBookYears() {
 export function useYearStats(year: number | null) {
   return useQuery<YearStats>({
     queryKey: ['stats', year === null ? 'all' : 'year', year],
-    queryFn: () => {
-      const url = year === null ? '/stats/all' : `/stats/year/${year}`;
-      console.log('[stats] GET', url);
-      return api.get<YearStats>(url).then((res) => {
-        console.log('[stats] yearStats result', res);
-        return res;
-      });
-    },
+    queryFn: () => api.get<YearStats>(year === null ? '/stats/all' : `/stats/year/${year}`),
     staleTime: 2 * 60_000
   });
 }
@@ -189,13 +169,7 @@ export function useYearStats(year: number | null) {
 export function useAllTimeStats() {
   return useQuery<YearStats>({
     queryKey: ['stats', 'all'],
-    queryFn: () => {
-      console.log('[stats] GET /stats/all');
-      return api.get<YearStats>('/stats/all').then((res) => {
-        console.log('[stats] allTime result', res);
-        return res;
-      });
-    },
+    queryFn: () => api.get<YearStats>('/stats/all'),
     staleTime: 2 * 60_000
   });
 }
@@ -260,14 +234,7 @@ export function useDeleteSession() {
 export function useStreaks(year?: number | null) {
   return useQuery<StreaksData>({
     queryKey: ['stats', 'streaks', year ?? null],
-    queryFn: () => {
-      const url = `/stats/streaks${year ? `?year=${year}` : ''}`;
-      console.log('[stats] GET', url);
-      return api.get<StreaksData>(url).then((res) => {
-        console.log('[stats] streaks result', res);
-        return res;
-      });
-    },
+    queryFn: () => api.get<StreaksData>(`/stats/streaks${year ? `?year=${year}` : ''}`),
     staleTime: 2 * 60_000
   });
 }

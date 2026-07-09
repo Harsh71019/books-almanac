@@ -130,11 +130,7 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
 
   // Epub lifecycle
   useEffect(() => {
-    if (!viewerRef.current || !id || !ready) {
-      console.log('[reader] mount effect skipped', { hasViewer: !!viewerRef.current, id, ready });
-      return;
-    }
-    console.log('[reader] mounting epub', { id, lastReadCfi: lastReadCfiRef.current });
+    if (!viewerRef.current || !id || !ready) return;
 
     let cancelled = false;
 
@@ -198,12 +194,9 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
     // (we're not cookie-based), so a dropped last-session-log on tab close is an
     // accepted tradeoff rather than a fixable gap here.
     const flushSession = () => {
-      console.log('[reader] flushSession() called', { currentCfi: currentCfiRef.current, sessionStartCfi });
       clearTimeout(progressSaveTimer);
       if (currentCfiRef.current) {
         saveProgressNow(currentCfiRef.current, Math.round(currentPercentageRef.current * 100));
-      } else {
-        console.log('[reader] flushSession: skipping final progress save, no currentCfiRef yet');
       }
       const durationSeconds = Math.round((Date.now() - sessionStartedAt) / 1000);
       const endCfi = currentCfiRef.current;
@@ -217,7 +210,6 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
       // hasn't (huge book, very short sitting), fall back to "moved at least one
       // page" rather than silently dropping the session.
       let pagesRead = 0;
-      let locationDebug: Record<string, unknown> = { reason: 'sessionStartCfi/endCfi missing or unchanged' };
       if (sessionStartCfi && endCfi && sessionStartCfi !== endCfi) {
         // locationFromCfi is mistyped upstream as returning DOM's `Location` —
         // it actually returns a number index (-1 if locations aren't generated yet).
@@ -226,19 +218,10 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
         pagesRead = startLoc !== -1 && endLoc !== -1
           ? Math.max(0, endLoc - startLoc)
           : 1;
-        locationDebug = { startLoc, endLoc, locationsGenerated: (epubBook.locations as unknown as { total: number }).total };
       }
 
-      console.log('[reader] session summary', { durationSeconds, pagesRead, sessionStartCfi, endCfi, ...locationDebug });
-
       if (pagesRead >= MIN_SESSION_PAGES && durationSeconds >= MIN_SESSION_DURATION_S) {
-        console.log('[reader] logging session ✓', { pagesRead, durationSeconds });
         logSession.mutate({ id, pagesRead, durationSeconds, date: new Date().toISOString().slice(0, 10) });
-      } else {
-        console.log('[reader] session NOT logged — below threshold', {
-          pagesRead, needPages: MIN_SESSION_PAGES,
-          durationSeconds, needDuration: MIN_SESSION_DURATION_S,
-        });
       }
     };
     window.addEventListener('beforeunload', flushSession);
@@ -246,13 +229,11 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
     // Track position on every page turn
     rendition.on('relocated', (loc: EpubLocation) => {
       if (cancelled) return;
-      console.log('[reader] relocated', { cfi: loc.start.cfi, percentage: loc.start.percentage, location: loc.start.location });
       currentCfiRef.current = loc.start.cfi;
       currentPercentageRef.current = loc.start.percentage ?? 0;
       setPercentage(loc.start.percentage ?? 0);
       if (sessionStartCfi === null) {
         sessionStartCfi = loc.start.cfi;
-        console.log('[reader] session start CFI set', sessionStartCfi);
       }
       if (loc.start.location != null) {
         setLocationIndex(loc.start.location);
@@ -262,7 +243,6 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
       // Debounced auto-save — 2s after the last page turn, not on every single one
       clearTimeout(progressSaveTimer);
       progressSaveTimer = setTimeout(() => {
-        console.log('[reader] debounce fired, saving progress', { cfi: loc.start.cfi, percentage: loc.start.percentage });
         saveProgressNow(loc.start.cfi, Math.round((loc.start.percentage ?? 0) * 100));
       }, PROGRESS_SAVE_DEBOUNCE_MS);
     });
@@ -296,12 +276,10 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
         await Promise.race([displayed, failed, timedOut]);
         if (!cancelled) {
           setLoading(false);
-          console.log('[reader] locations.generate(1500) starting…');
           epubBook.locations.generate(1500)
             .then(() => {
               // `total` is set at runtime but missing from epubjs's upstream Locations type
               const total = (epubBook.locations as unknown as { total: number }).total;
-              console.log('[reader] locations.generate finished ✓', { total });
               if (!cancelled) setTotalLocations(total);
             })
             .catch((err) => console.error('[reader] locations.generate FAILED ✗', err));
@@ -322,7 +300,6 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
     });
 
     return () => {
-      console.log('[reader] unmount cleanup — flushing session');
       cancelled = true;
       window.removeEventListener('beforeunload', flushSession);
       flushSession();

@@ -9,7 +9,6 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
-      COOKIE_SECURE: "false"
       UPLOAD_DIR: uploads
       CLIENT_BUILD_DIR: client/dist
     volumes:
@@ -17,7 +16,7 @@ services:
     networks:
       - books-app-net
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4000/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/api/health/ready"]
       interval: 30s
       timeout: 10s
       retries: 3

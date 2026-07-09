@@ -1,5 +1,4 @@
 import 'reflect-metadata';
-import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
@@ -13,9 +12,9 @@ async function bootstrap() {
 
   app.useLogger(app.get(Logger));
   app.use(helmet());
-  app.use(cookieParser());
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ZodValidationPipe());
+  app.enableShutdownHooks();
 
   const port = config.getOrThrow<number>('PORT');
   await app.listen(port);
