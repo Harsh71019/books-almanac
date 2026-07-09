@@ -216,20 +216,6 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
     viewerEl.addEventListener('touchstart', onHostTap, { passive: true });
     viewerEl.addEventListener('click', onHostTap, { passive: true });
 
-    const reportIframes = () => {
-      const iframes = viewerEl.querySelectorAll('iframe');
-      const rects = Array.from(iframes).map((f) => {
-        const r = f.getBoundingClientRect();
-        const cs = getComputedStyle(f);
-        return `${Math.round(r.width)}x${Math.round(r.height)}@(${Math.round(r.left)},${Math.round(r.top)}) pe=${cs.pointerEvents}`;
-      });
-      const parentCs = viewerEl.parentElement ? getComputedStyle(viewerEl.parentElement) : null;
-      iframeInfo = `iframes:${iframes.length}[${rects.join(',')}] parentOverflow=${parentCs?.overflow} parentTransform=${parentCs?.transform}`;
-      renderDebug();
-    };
-    const iframeObserver = new MutationObserver(reportIframes);
-    iframeObserver.observe(viewerEl, { childList: true, subtree: true });
-
     const onTouchStart = (e: TouchEvent) => {
       counts.touchstart++;
       touchStartX = e.changedTouches[0].screenX;
@@ -247,22 +233,41 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
     const onClick = () => { counts.click++; renderDebug(); };
     const onPointerDown = () => { counts.pointerdown++; renderDebug(); };
 
-    rendition.on('rendered', () => {
-      reportIframes();
-      const views = (rendition as unknown as { manager?: { views?: { all: () => { document?: Document }[] } } })
-        .manager?.views?.all() ?? [];
-      for (const view of views) {
-        const doc = view.document;
-        if (!doc || attachedDocs.has(doc)) continue;
+    // Attach straight to the real <iframe> elements found via querySelectorAll
+    // (the same ones whose geometry we log) rather than trusting epubjs's
+    // internal manager.views.all() bookkeeping to point at the currently
+    // live/visible document — removes any chance of attaching to a stale
+    // or wrong iframe reference.
+    const scanIframes = () => {
+      const iframes = viewerEl.querySelectorAll('iframe');
+      const rects = Array.from(iframes).map((f) => {
+        const r = f.getBoundingClientRect();
+        const cs = getComputedStyle(f);
+        return `${Math.round(r.width)}x${Math.round(r.height)}@(${Math.round(r.left)},${Math.round(r.top)}) pe=${cs.pointerEvents}`;
+      });
+      const parentCs = viewerEl.parentElement ? getComputedStyle(viewerEl.parentElement) : null;
+      iframeInfo = `iframes:${iframes.length}[${rects.join(',')}] parentOverflow=${parentCs?.overflow} parentTransform=${parentCs?.transform}`;
+
+      iframes.forEach((f) => {
+        let doc: Document | null = null;
+        try { doc = f.contentDocument; } catch { /* cross-origin, shouldn't happen (same-origin blob/data src) */ }
+        if (!doc || attachedDocs.has(doc)) return;
         attachedDocs.add(doc);
         counts.views++;
         doc.addEventListener('touchstart', onTouchStart, { passive: true });
         doc.addEventListener('touchend', onTouchEnd, { passive: true });
         doc.addEventListener('click', onClick, { passive: true });
         doc.addEventListener('pointerdown', onPointerDown, { passive: true });
-        renderDebug();
-      }
-    });
+      });
+      renderDebug();
+    };
+    const iframeObserver = new MutationObserver(scanIframes);
+    iframeObserver.observe(viewerEl, { childList: true, subtree: true });
+    // Belt-and-braces: MutationObserver can miss iframe navigations that
+    // don't change the DOM tree (same element, new document via src/srcdoc
+    // change) — a cheap poll catches those too. Cleared on unmount below.
+    const iframePoll = setInterval(scanIframes, 1000);
+    rendition.on('rendered', scanIframes);
 
     // Reading-session bookkeeping for this mount only (one reader open = one sitting)
     const sessionStartedAt = Date.now();
@@ -388,6 +393,7 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
     return () => {
       cancelled = true;
       iframeObserver.disconnect();
+      clearInterval(iframePoll);
       viewerEl.removeEventListener('touchstart', onHostTap);
       viewerEl.removeEventListener('click', onHostTap);
       window.removeEventListener('beforeunload', flushSession);
