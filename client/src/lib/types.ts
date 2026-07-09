@@ -24,6 +24,7 @@ export interface Book {
   hasEpub: boolean;
   epubSize: number | null;
   lastReadCfi: string | null;
+  kavitaSeriesId: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -44,6 +45,7 @@ export interface BookQuery {
   language?: string;
   author?: string;
   q?: string;
+  hasEpub?: boolean;
   sort?: 'recently_finished' | 'rating' | 'page_count' | 'title' | 'date_added';
   page?: number;
   limit?: number;

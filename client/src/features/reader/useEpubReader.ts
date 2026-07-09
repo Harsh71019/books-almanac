@@ -1,14 +1,39 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ePub, { Book, Rendition } from 'epubjs';
+import type { NavItem } from 'epubjs';
 import { tokenStore } from '@/lib/api';
+import { useSaveEpubProgress, useLogEpubSession } from '@/lib/queries';
 import { buildThemeCss } from './themes';
 import type { Theme, FontSettings } from './types';
 
 interface UseEpubReaderOptions {
   id:           string;
   lastReadCfi?: string | null;
+  pageCount?:   number | null;
   fontSettings: FontSettings;
+  // Whether the parent book record (and therefore lastReadCfi) has actually
+  // loaded yet. Without this, the epub mounts and calls rendition.display()
+  // before the async book fetch resolves, silently opening at page 1 and
+  // dropping the saved position — this effect never re-runs for the same id,
+  // so a lastReadCfi that arrives a beat later has nowhere to go.
+  ready?: boolean;
 }
+
+export interface SearchResult {
+  cfi:     string;
+  excerpt: string;
+}
+
+// epubjs's Section#find/search aren't in its upstream .d.ts, but exist at runtime
+interface SearchableSpineItem {
+  load:   (request: unknown) => Promise<unknown>;
+  unload: () => void;
+  find:   (query: string) => SearchResult[];
+}
+
+const PROGRESS_SAVE_DEBOUNCE_MS = 2000;
+const MIN_SESSION_DURATION_S    = 30; // matches server epubSessionSchema floor
+const MIN_SESSION_PAGES         = 1;
 
 // epubjs relocated event payload (types are incomplete upstream)
 interface EpubLocation {
@@ -24,14 +49,30 @@ interface EpubLocation {
   atEnd?:   boolean;
 }
 
-export function useEpubReader({ id, lastReadCfi, fontSettings }: UseEpubReaderOptions) {
+export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready = true }: UseEpubReaderOptions) {
   const viewerRef    = useRef<HTMLDivElement>(null);
   const bookRef      = useRef<Book | null>(null);
   const renditionRef = useRef<Rendition | null>(null);
 
+  const saveProgress = useSaveEpubProgress();
+  const logSession    = useLogEpubSession();
+
   // Keep latest CFI in a ref so the init effect reads it without re-running
   const lastReadCfiRef = useRef(lastReadCfi);
   useEffect(() => { lastReadCfiRef.current = lastReadCfi; }, [lastReadCfi]);
+
+  // pageCount can arrive after the epub lifecycle effect has already mounted
+  // (book fetch resolves independently) — keep it in a ref so progress saves
+  // use the latest value without re-running (and re-fetching) the epub.
+  const pageCountRef = useRef(pageCount);
+  useEffect(() => { pageCountRef.current = pageCount; }, [pageCount]);
+
+  // Track current position + last-applied page layout so the live-update
+  // effect can force a full relayout only when single/spread actually flips
+  const currentCfiRef        = useRef<string | undefined>(undefined);
+  const currentPercentageRef = useRef(0);
+  const locationIndexRef     = useRef<number | null>(null);
+  const prevLayoutRef        = useRef(fontSettings.pageLayout);
 
   const [loading,        setLoading]        = useState(true);
   const [error,          setError]          = useState<string | null>(null);
@@ -39,10 +80,37 @@ export function useEpubReader({ id, lastReadCfi, fontSettings }: UseEpubReaderOp
   const [percentage,     setPercentage]     = useState(0);
   const [locationIndex,  setLocationIndex]  = useState<number | null>(null);
   const [totalLocations, setTotalLocations] = useState<number | null>(null);
+  const [toc,            setToc]            = useState<NavItem[]>([]);
 
   const applyTheme = useCallback((t: Theme) => {
     setThemeState(t);
     renditionRef.current?.themes.select(t);
+  }, []);
+
+  // Jump to a TOC href or a search-result CFI — rendition.display() accepts either
+  const goTo = useCallback((target: string) => {
+    renditionRef.current?.display(target).catch(() => undefined);
+  }, []);
+
+  const search = useCallback(async (query: string): Promise<SearchResult[]> => {
+    const book = bookRef.current;
+    const q = query.trim();
+    if (!book || !q) return [];
+
+    const items = (book.spine as unknown as { spineItems: SearchableSpineItem[] }).spineItems;
+    const perSection = await Promise.all(
+      items.map(async (item) => {
+        try {
+          await item.load(book.load.bind(book));
+          const matches = item.find(q);
+          item.unload();
+          return matches;
+        } catch {
+          return [];
+        }
+      })
+    );
+    return perSection.flat();
   }, []);
 
   const prev = useCallback(() => renditionRef.current?.prev(), []);
@@ -62,7 +130,11 @@ export function useEpubReader({ id, lastReadCfi, fontSettings }: UseEpubReaderOp
 
   // Epub lifecycle
   useEffect(() => {
-    if (!viewerRef.current || !id) return;
+    if (!viewerRef.current || !id || !ready) {
+      console.log('[reader] mount effect skipped', { hasViewer: !!viewerRef.current, id, ready });
+      return;
+    }
+    console.log('[reader] mounting epub', { id, lastReadCfi: lastReadCfiRef.current });
 
     let cancelled = false;
 
@@ -71,7 +143,7 @@ export function useEpubReader({ id, lastReadCfi, fontSettings }: UseEpubReaderOp
     const epubBook = ePub(`/api/books/${id}/epub/file`, {
       openAs: 'epub',
       requestHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
-    } as Parameters<typeof ePub>[1]);
+    });
     bookRef.current = epubBook;
 
     const rendition = epubBook.renderTo(viewerRef.current, {
@@ -93,12 +165,106 @@ export function useEpubReader({ id, lastReadCfi, fontSettings }: UseEpubReaderOp
       window.dispatchEvent(new KeyboardEvent('keydown', e))
     );
 
+    // Swipe-to-turn-page on touch devices — the click-zone nav strips outside
+    // the iframe are narrow on mobile, so swipe is the primary touch gesture.
+    // epubjs forwards iframe touch events onto the rendition via the same
+    // passEvents mechanism used for keydown above; there's no built-in swipe.
+    const SWIPE_THRESHOLD_PX = 40;
+    let touchStartX: number | null = null;
+    rendition.on('touchstart', (e: TouchEvent) => {
+      touchStartX = e.changedTouches[0].screenX;
+    });
+    rendition.on('touchend', (e: TouchEvent) => {
+      if (touchStartX == null) return;
+      const deltaX = e.changedTouches[0].screenX - touchStartX;
+      touchStartX = null;
+      if (deltaX > SWIPE_THRESHOLD_PX) rendition.prev();
+      else if (deltaX < -SWIPE_THRESHOLD_PX) rendition.next();
+    });
+
+    // Reading-session bookkeeping for this mount only (one reader open = one sitting)
+    const sessionStartedAt = Date.now();
+    let sessionStartCfi: string | null = null;
+    let progressSaveTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const saveProgressNow = (cfi: string, pct: number) => {
+      const estimatedPage = pageCountRef.current ? Math.round((pct / 100) * pageCountRef.current) : null;
+      saveProgress.mutate({ id, cfi, percentage: pct, estimatedPage });
+    };
+
+    // Best-effort flush on the way out. This covers SPA navigation away from the
+    // reader (effect cleanup runs normally) but NOT a hard tab close/refresh —
+    // sendBeacon would survive that, but it can't carry our Bearer auth header
+    // (we're not cookie-based), so a dropped last-session-log on tab close is an
+    // accepted tradeoff rather than a fixable gap here.
+    const flushSession = () => {
+      console.log('[reader] flushSession() called', { currentCfi: currentCfiRef.current, sessionStartCfi });
+      clearTimeout(progressSaveTimer);
+      if (currentCfiRef.current) {
+        saveProgressNow(currentCfiRef.current, Math.round(currentPercentageRef.current * 100));
+      } else {
+        console.log('[reader] flushSession: skipping final progress save, no currentCfiRef yet');
+      }
+      const durationSeconds = Math.round((Date.now() - sessionStartedAt) / 1000);
+      const endCfi = currentCfiRef.current;
+
+      // book.locations' global index (loc.start.location on relocated events) is
+      // only valid once locations.generate(1500) finishes — for a short reading
+      // sitting that can still be in flight, so every 'relocated' event along the
+      // way carries an undefined location and pagesRead would always compute to 0.
+      // Resolve the location delta here instead, at the very end of the sitting,
+      // which gives generate() the most possible time to complete. If it still
+      // hasn't (huge book, very short sitting), fall back to "moved at least one
+      // page" rather than silently dropping the session.
+      let pagesRead = 0;
+      let locationDebug: Record<string, unknown> = { reason: 'sessionStartCfi/endCfi missing or unchanged' };
+      if (sessionStartCfi && endCfi && sessionStartCfi !== endCfi) {
+        // locationFromCfi is mistyped upstream as returning DOM's `Location` —
+        // it actually returns a number index (-1 if locations aren't generated yet).
+        const startLoc = epubBook.locations.locationFromCfi(sessionStartCfi) as unknown as number;
+        const endLoc   = epubBook.locations.locationFromCfi(endCfi) as unknown as number;
+        pagesRead = startLoc !== -1 && endLoc !== -1
+          ? Math.max(0, endLoc - startLoc)
+          : 1;
+        locationDebug = { startLoc, endLoc, locationsGenerated: (epubBook.locations as unknown as { total: number }).total };
+      }
+
+      console.log('[reader] session summary', { durationSeconds, pagesRead, sessionStartCfi, endCfi, ...locationDebug });
+
+      if (pagesRead >= MIN_SESSION_PAGES && durationSeconds >= MIN_SESSION_DURATION_S) {
+        console.log('[reader] logging session ✓', { pagesRead, durationSeconds });
+        logSession.mutate({ id, pagesRead, durationSeconds, date: new Date().toISOString().slice(0, 10) });
+      } else {
+        console.log('[reader] session NOT logged — below threshold', {
+          pagesRead, needPages: MIN_SESSION_PAGES,
+          durationSeconds, needDuration: MIN_SESSION_DURATION_S,
+        });
+      }
+    };
+    window.addEventListener('beforeunload', flushSession);
 
     // Track position on every page turn
     rendition.on('relocated', (loc: EpubLocation) => {
       if (cancelled) return;
+      console.log('[reader] relocated', { cfi: loc.start.cfi, percentage: loc.start.percentage, location: loc.start.location });
+      currentCfiRef.current = loc.start.cfi;
+      currentPercentageRef.current = loc.start.percentage ?? 0;
       setPercentage(loc.start.percentage ?? 0);
-      if (loc.start.location != null) setLocationIndex(loc.start.location);
+      if (sessionStartCfi === null) {
+        sessionStartCfi = loc.start.cfi;
+        console.log('[reader] session start CFI set', sessionStartCfi);
+      }
+      if (loc.start.location != null) {
+        setLocationIndex(loc.start.location);
+        locationIndexRef.current = loc.start.location;
+      }
+
+      // Debounced auto-save — 2s after the last page turn, not on every single one
+      clearTimeout(progressSaveTimer);
+      progressSaveTimer = setTimeout(() => {
+        console.log('[reader] debounce fired, saving progress', { cfi: loc.start.cfi, percentage: loc.start.percentage });
+        saveProgressNow(loc.start.cfi, Math.round((loc.start.percentage ?? 0) * 100));
+      }, PROGRESS_SAVE_DEBOUNCE_MS);
     });
 
     const init = async () => {
@@ -130,10 +296,17 @@ export function useEpubReader({ id, lastReadCfi, fontSettings }: UseEpubReaderOp
         await Promise.race([displayed, failed, timedOut]);
         if (!cancelled) {
           setLoading(false);
+          console.log('[reader] locations.generate(1500) starting…');
           epubBook.locations.generate(1500)
             .then(() => {
-              if (!cancelled) setTotalLocations(epubBook.locations.total);
+              // `total` is set at runtime but missing from epubjs's upstream Locations type
+              const total = (epubBook.locations as unknown as { total: number }).total;
+              console.log('[reader] locations.generate finished ✓', { total });
+              if (!cancelled) setTotalLocations(total);
             })
+            .catch((err) => console.error('[reader] locations.generate FAILED ✗', err));
+          epubBook.loaded.navigation
+            .then((nav) => { if (!cancelled) setToc(nav.toc); })
             .catch(() => undefined);
         }
       } finally {
@@ -149,14 +322,17 @@ export function useEpubReader({ id, lastReadCfi, fontSettings }: UseEpubReaderOp
     });
 
     return () => {
+      console.log('[reader] unmount cleanup — flushing session');
       cancelled = true;
+      window.removeEventListener('beforeunload', flushSession);
+      flushSession();
       epubBook.destroy();
       bookRef.current      = null;
       renditionRef.current = null;
     };
   // theme intentionally excluded — applyTheme handles live switching without re-mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, ready]);
 
   // Re-apply themes + layout whenever font settings or theme changes (no epub re-mount needed).
   // theme must be in deps: applyTheme calls themes.select immediately with the *last registered*
@@ -174,6 +350,19 @@ export function useEpubReader({ id, lastReadCfi, fontSettings }: UseEpubReaderOp
     // Switch spread mode live
     (rendition as unknown as { spread: (s: string) => void })
       .spread(fontSettings.pageLayout === 'spread' ? 'auto' : 'none');
+
+    // spread() only recalculates column math (manager.updateLayout) — it never
+    // clears the already-rendered views, so old single/two-column views stay
+    // laid out under the new geometry. rendition.resize() looks like the fix,
+    // but its internal manager bails out early whenever the measured width
+    // matches manager._stageSize — which spread()'s own updateLayout() call
+    // just set moments earlier, so resize() silently no-ops here. Force the
+    // clear + redisplay directly instead, only on an actual layout flip.
+    if (prevLayoutRef.current !== fontSettings.pageLayout) {
+      prevLayoutRef.current = fontSettings.pageLayout;
+      rendition.clear();
+      rendition.display(currentCfiRef.current).catch(() => undefined);
+    }
   }, [fontSettings, theme, loading]);
 
   // Page label: "68 / 393" once locations ready, else "47%" fallback
@@ -196,5 +385,8 @@ export function useEpubReader({ id, lastReadCfi, fontSettings }: UseEpubReaderOp
     scrubTo,
     percentage,
     pageLabel,
+    toc,
+    goTo,
+    search,
   };
 }

@@ -47,6 +47,7 @@ export function FontPanel({
         style={{
           top: 56, right: 10,
           width: 292,
+          maxWidth: 'calc(100vw - 20px)',
           borderRadius: 20,
           overflow: 'hidden',
           // Dark liquid glass — same recipe as BottomNav but darker

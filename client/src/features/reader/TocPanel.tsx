@@ -1,16 +1,20 @@
 import { useEffect, useRef } from 'react';
+import type { NavItem } from 'epubjs';
 import type { FontSettings } from './types';
 
 type PageLayout = FontSettings['pageLayout'];
 
 interface TocPanelProps {
-  open:         boolean;
-  pageLayout:   PageLayout;
-  onPageLayout: (layout: PageLayout) => void;
-  onClose:      () => void;
+  open:             boolean;
+  pageLayout:       PageLayout;
+  hideSpreadOption?: boolean;
+  toc?:             NavItem[];
+  onNavigate?:      (href: string) => void;
+  onPageLayout:     (layout: PageLayout) => void;
+  onClose:          () => void;
 }
 
-export function TocPanel({ open, pageLayout, onPageLayout, onClose }: TocPanelProps) {
+export function TocPanel({ open, pageLayout, hideSpreadOption, toc, onNavigate, onPageLayout, onClose }: TocPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,7 +37,11 @@ export function TocPanel({ open, pageLayout, onPageLayout, onClose }: TocPanelPr
       className="absolute z-40"
       style={{
         top: 56, right: 10,
-        width: 220,
+        width: 260,
+        maxWidth: 'calc(100vw - 20px)',
+        maxHeight: 'calc(100vh - 100px)',
+        display: 'flex',
+        flexDirection: 'column',
         borderRadius: 20,
         overflow: 'hidden',
         background:           'rgba(30,30,32,0.88)',
@@ -65,7 +73,31 @@ export function TocPanel({ open, pageLayout, onPageLayout, onClose }: TocPanelPr
         borderRadius: '3px 0 0 0',
       }} />
 
-      <div style={{ padding: '16px 14px 16px' }}>
+      <div style={{ padding: '16px 14px 16px', overflowY: 'auto' }}>
+        {toc && toc.length > 0 && (
+          <>
+            <p style={{
+              fontSize: 11, fontWeight: 600,
+              color: 'rgba(255,255,255,0.38)',
+              fontFamily: 'system-ui,sans-serif',
+              letterSpacing: '0.07em',
+              textTransform: 'uppercase',
+              marginBottom: 8,
+            }}>
+              Contents
+            </p>
+            <div style={{ maxHeight: 280, overflowY: 'auto', marginBottom: 16 }}>
+              {toc.map((item) => (
+                <TocEntry
+                  key={item.id}
+                  item={item}
+                  onNavigate={(href) => { onNavigate?.(href); onClose(); }}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
         <p style={{
           fontSize: 11, fontWeight: 600,
           color: 'rgba(255,255,255,0.38)',
@@ -80,7 +112,9 @@ export function TocPanel({ open, pageLayout, onPageLayout, onClose }: TocPanelPr
         <div style={{ display: 'flex', gap: 8 }}>
           {([
             { value: 'single' as PageLayout, label: 'Single',    icon: <IconSinglePage /> },
-            { value: 'spread' as PageLayout, label: 'Two Pages', icon: <IconSpreadPage /> },
+            ...(hideSpreadOption
+              ? []
+              : [{ value: 'spread' as PageLayout, label: 'Two Pages', icon: <IconSpreadPage /> }]),
           ]).map(({ value, label, icon }) => {
             const active = pageLayout === value;
             return (
@@ -113,6 +147,37 @@ export function TocPanel({ open, pageLayout, onPageLayout, onClose }: TocPanelPr
         </div>
       </div>
     </div>
+  );
+}
+
+function TocEntry({ item, onNavigate, depth = 0 }: { item: NavItem; onNavigate: (href: string) => void; depth?: number }) {
+  return (
+    <>
+      <button
+        onClick={() => onNavigate(item.href)}
+        style={{
+          display: 'block',
+          width: '100%',
+          textAlign: 'left',
+          padding: `7px 8px 7px ${8 + depth * 14}px`,
+          borderRadius: 8,
+          background: 'transparent',
+          color: 'rgba(255,255,255,0.72)',
+          fontSize: 12.5,
+          fontFamily: 'system-ui,sans-serif',
+          lineHeight: 1.35,
+          cursor: 'pointer',
+          transition: 'background 0.15s, color 0.15s',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(255,255,255,0.92)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.72)'; }}
+      >
+        {item.label?.trim() || 'Untitled'}
+      </button>
+      {item.subitems?.map((sub) => (
+        <TocEntry key={sub.id} item={sub} onNavigate={onNavigate} depth={depth + 1} />
+      ))}
+    </>
   );
 }
 

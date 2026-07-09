@@ -61,6 +61,56 @@ export function useDeleteBook() {
   });
 }
 
+export function useSaveEpubProgress() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { id: string; cfi: string; percentage: number; estimatedPage: number | null }) => {
+      console.log('[reader] PATCH epub-progress →', payload);
+      return api.patch<Book>(`/books/${payload.id}/epub-progress`, {
+        cfi: payload.cfi,
+        percentage: payload.percentage,
+        estimatedPage: payload.estimatedPage
+      });
+    },
+    onSuccess: (book) => {
+      console.log('[reader] epub-progress saved ✓', { id: book.id, lastReadCfi: book.lastReadCfi, status: book.status, currentPage: book.currentPage });
+      qc.setQueryData(['book', book.id], book);
+      qc.invalidateQueries({ queryKey: ['books'] });
+      // status can auto-transition (want_to_read → reading → read) here, which
+      // feeds Overview's status counts — same broad ['stats'] as book mutations.
+      qc.invalidateQueries({ queryKey: ['stats'] });
+    },
+    onError: (err) => {
+      console.error('[reader] epub-progress FAILED ✗', err);
+    }
+  });
+}
+
+export function useLogEpubSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { id: string; pagesRead: number; durationSeconds: number; date: string }) => {
+      console.log('[reader] POST epub-session →', payload);
+      return api.post(`/books/${payload.id}/epub-session`, {
+        pagesRead: payload.pagesRead,
+        durationSeconds: payload.durationSeconds,
+        date: payload.date
+      });
+    },
+    onSuccess: (res) => {
+      console.log('[reader] epub-session logged ✓', res);
+      qc.invalidateQueries({ queryKey: ['sessions'] });
+      // Broad ['stats'] — the Statistics page (useYearStats/useAllTimeStats) lives
+      // under ['stats','all'|'year',...], which the narrower streaks/overview keys
+      // never matched, so it silently never refreshed after a session was logged.
+      qc.invalidateQueries({ queryKey: ['stats'] });
+    },
+    onError: (err) => {
+      console.error('[reader] epub-session FAILED ✗', err);
+    }
+  });
+}
+
 export function useUploadCover() {
   return useMutation({
     mutationFn: (file: File) => {
@@ -93,7 +143,14 @@ export function useMetaSearch(q: string) {
 export function useOverview(year?: number | null) {
   return useQuery<Overview>({
     queryKey: ['stats', 'overview', year ?? null],
-    queryFn: () => api.get(`/stats/overview${year ? `?year=${year}` : ''}`),
+    queryFn: () => {
+      const url = `/stats/overview${year ? `?year=${year}` : ''}`;
+      console.log('[stats] GET', url);
+      return api.get<Overview>(url).then((res) => {
+        console.log('[stats] overview result', res);
+        return res;
+      });
+    },
     staleTime: 2 * 60_000
   });
 }
@@ -117,7 +174,14 @@ export function useBookYears() {
 export function useYearStats(year: number | null) {
   return useQuery<YearStats>({
     queryKey: ['stats', year === null ? 'all' : 'year', year],
-    queryFn: () => year === null ? api.get('/stats/all') : api.get(`/stats/year/${year}`),
+    queryFn: () => {
+      const url = year === null ? '/stats/all' : `/stats/year/${year}`;
+      console.log('[stats] GET', url);
+      return api.get<YearStats>(url).then((res) => {
+        console.log('[stats] yearStats result', res);
+        return res;
+      });
+    },
     staleTime: 2 * 60_000
   });
 }
@@ -125,7 +189,13 @@ export function useYearStats(year: number | null) {
 export function useAllTimeStats() {
   return useQuery<YearStats>({
     queryKey: ['stats', 'all'],
-    queryFn: () => api.get('/stats/all'),
+    queryFn: () => {
+      console.log('[stats] GET /stats/all');
+      return api.get<YearStats>('/stats/all').then((res) => {
+        console.log('[stats] allTime result', res);
+        return res;
+      });
+    },
     staleTime: 2 * 60_000
   });
 }
@@ -156,8 +226,10 @@ export function useCreateSession() {
     mutationFn: (payload: ReadingSessionPayload) => api.post<ReadingSession>('/reading-sessions', payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sessions'] });
-      qc.invalidateQueries({ queryKey: ['stats', 'streaks'] });
-      qc.invalidateQueries({ queryKey: ['stats', 'overview'] });
+      // Broad ['stats'] invalidation, not just streaks/overview — the Statistics
+      // page (useYearStats/useAllTimeStats) lives under ['stats','all'|'year',...]
+      // and was silently never refreshed by session changes otherwise.
+      qc.invalidateQueries({ queryKey: ['stats'] });
     }
   });
 }
@@ -169,7 +241,7 @@ export function useUpdateSession() {
       api.patch<ReadingSession>(`/reading-sessions/${id}`, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sessions'] });
-      qc.invalidateQueries({ queryKey: ['stats', 'streaks'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
     }
   });
 }
@@ -180,16 +252,22 @@ export function useDeleteSession() {
     mutationFn: (id: string) => api.delete(`/reading-sessions/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sessions'] });
-      qc.invalidateQueries({ queryKey: ['stats', 'streaks'] });
-      qc.invalidateQueries({ queryKey: ['stats', 'overview'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
     }
   });
 }
 
-export function useStreaks() {
+export function useStreaks(year?: number | null) {
   return useQuery<StreaksData>({
-    queryKey: ['stats', 'streaks'],
-    queryFn: () => api.get('/stats/streaks'),
+    queryKey: ['stats', 'streaks', year ?? null],
+    queryFn: () => {
+      const url = `/stats/streaks${year ? `?year=${year}` : ''}`;
+      console.log('[stats] GET', url);
+      return api.get<StreaksData>(url).then((res) => {
+        console.log('[stats] streaks result', res);
+        return res;
+      });
+    },
     staleTime: 2 * 60_000
   });
 }
@@ -197,10 +275,17 @@ export function useStreaks() {
 /* ── Kavita ── */
 
 export interface KavitaSeries {
-  seriesId: number;
-  title:    string;
-  coverUrl: string;
-  format:   number;
+  seriesId:    number;
+  title:       string;
+  coverUrl:    string;
+  format:      number;
+  formatLabel: string;
+  libraryId:   number | null;
+}
+
+export interface KavitaLibrary {
+  id:   number;
+  name: string;
 }
 
 export function useKavitaBrowse(url: string, username: string, password: string, enabled: boolean) {
@@ -213,11 +298,21 @@ export function useKavitaBrowse(url: string, username: string, password: string,
   });
 }
 
+export function useKavitaLibraries(url: string, username: string, password: string, enabled: boolean) {
+  return useQuery<KavitaLibrary[]>({
+    queryKey: ['kavita', 'libraries', url, username],
+    queryFn:  () => api.post('/kavita/libraries', { url, username, password }),
+    enabled:  enabled && !!url && !!username && !!password,
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
 export function useKavitaImport() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload: { url: string; username: string; password: string; seriesId: number }) =>
-      api.post<Book>('/kavita/import', payload),
+      api.post<Book & { partialImport?: boolean }>('/kavita/import', payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['books'] });
     }

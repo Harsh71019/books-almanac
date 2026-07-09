@@ -12,8 +12,13 @@ import {
   FontPanel,
   TocPanel,
   CustomizeModal,
+  SearchOverlay,
 } from '@/features/reader';
 import type { ThemePreset } from '@/features/reader';
+
+// Matches epubjs's minSpreadWidth (useEpubReader.ts) — below this, epubjs
+// refuses to render spread layout anyway, so the UI toggle should agree.
+const MOBILE_QUERY = '(max-width: 899px)';
 
 export function ReaderPage() {
   const { id }         = useParams<{ id: string }>();
@@ -23,11 +28,25 @@ export function ReaderPage() {
   const [fontPanelOpen,  setFontPanelOpen]  = useState(false);
   const [customizeOpen,  setCustomizeOpen]  = useState(false);
   const [tocPanelOpen,   setTocPanelOpen]   = useState(false);
+  const [searchOpen,     setSearchOpen]     = useState(false);
   const [activePresetId, setActivePresetId] = useState<string | null>('paper');
 
-  const { settings, updateSettings, applyPreset, resetSettings } = useFontSettings();
+  // Two-page spread doesn't fit on a phone screen — hide the option and force
+  // single-page there, without touching the user's saved desktop preference.
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_QUERY).matches);
+  useEffect(() => {
+    const mql = window.matchMedia(MOBILE_QUERY);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, []);
 
-  const { visible: chromeVisible } = useReaderChrome(fontPanelOpen || customizeOpen || tocPanelOpen);
+  const { settings, updateSettings, applyPreset, resetSettings } = useFontSettings();
+  const effectiveSettings = isMobile && settings.pageLayout === 'spread'
+    ? { ...settings, pageLayout: 'single' as const }
+    : settings;
+
+  const { visible: chromeVisible } = useReaderChrome(fontPanelOpen || customizeOpen || tocPanelOpen || searchOpen);
 
   const {
     viewerRef,
@@ -40,7 +59,10 @@ export function ReaderPage() {
     scrubTo,
     percentage,
     pageLabel,
-  } = useEpubReader({ id: id!, lastReadCfi: book?.lastReadCfi, fontSettings: settings });
+    toc,
+    goTo,
+    search,
+  } = useEpubReader({ id: id!, lastReadCfi: book?.lastReadCfi, pageCount: book?.pageCount, fontSettings: effectiveSettings, ready: !!book });
 
   const { triggerNext, triggerPrev, pageAnimStyle } = usePageTurn(prev, next, loading);
 
@@ -78,7 +100,7 @@ export function ReaderPage() {
   }, []);
 
   const t        = THEMES[theme];
-  const isSpread = settings.pageLayout === 'spread';
+  const isSpread = effectiveSettings.pageLayout === 'spread';
 
   // ── error state ──────────────────────────────────────────────────────────────
   if (error) {
@@ -111,6 +133,7 @@ export function ReaderPage() {
         onBack={() => navigate(-1)}
         onFullscreen={toggleFullscreen}
         isFullscreen={isFullscreen}
+        onSearch={() => { setSearchOpen(true); setFontPanelOpen(false); setTocPanelOpen(false); }}
         onFontPanel={() => { setFontPanelOpen((v) => !v); setTocPanelOpen(false); }}
         onToc={() => { setTocPanelOpen((v) => !v); setFontPanelOpen(false); }}
       />
@@ -228,7 +251,10 @@ export function ReaderPage() {
       {/* TOC / layout panel (☰ button) */}
       <TocPanel
         open={tocPanelOpen}
-        pageLayout={settings.pageLayout}
+        pageLayout={effectiveSettings.pageLayout}
+        hideSpreadOption={isMobile}
+        toc={toc}
+        onNavigate={goTo}
         onPageLayout={(layout) => updateSettings({ pageLayout: layout })}
         onClose={() => setTocPanelOpen(false)}
       />
@@ -240,6 +266,14 @@ export function ReaderPage() {
         onChange={(patch) => { updateSettings(patch); setActivePresetId(null); }}
         onReset={() => { resetSettings(); setActivePresetId('paper'); }}
         onClose={() => setCustomizeOpen(false)}
+      />
+
+      {/* In-book search */}
+      <SearchOverlay
+        open={searchOpen}
+        onSearch={search}
+        onSelect={goTo}
+        onClose={() => setSearchOpen(false)}
       />
 
       {/* Bottom bar */}

@@ -10,3 +10,5 @@ export { ReaderBottomBar } from './ReaderBottomBar';
 export { FontPanel } from './FontPanel';
 export { TocPanel } from './TocPanel';
 export { CustomizeModal } from './CustomizeModal';
+export { SearchOverlay } from './SearchOverlay';
+export type { SearchResult } from './useEpubReader';

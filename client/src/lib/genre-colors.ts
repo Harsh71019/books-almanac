@@ -29,7 +29,8 @@ const OVERFLOW_COLORS = [
   '#6B6B3A','#6E2F46','#46688C','#9B5B3E',
 ];
 
-export function genreColor(genre: string): string {
+export function genreColor(genre: string | null | undefined): string {
+  if (!genre) return OVERFLOW_COLORS[0];
   if (GENRE_COLOR_MAP[genre]) return GENRE_COLOR_MAP[genre];
   let hash = 0;
   for (let i = 0; i < genre.length; i++) hash = genre.charCodeAt(i) + ((hash << 5) - hash);

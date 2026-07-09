@@ -4,17 +4,19 @@ import { useBookYears } from '@/lib/queries';
 import { useYear } from '@/features/year/YearContext';
 
 const NAV = [
-  { to: '/',          label: 'Overview',    dot: '#d98a5a' },
-  { to: '/library',   label: 'The Wall',    dot: '#c8473f' },
-  { to: '/streaks',   label: 'Streaks',     dot: '#cf7d4a' },
-  { to: '/year',      label: 'Statistics',  dot: '#6f9a86' },
-  { to: '/add',       label: 'Add a Book',  dot: '#d8a13a' },
-  { to: '/kavita',    label: 'Kavita',      dot: '#7a9bbf' },
+  { to: '/',          label: 'Overview',      dot: '#d98a5a' },
+  { to: '/library',   label: 'The Wall',      dot: '#c8473f' },
+  { to: '/digital',   label: 'Digital Books', dot: '#7a9bbf' },
+  { to: '/streaks',   label: 'Streaks',       dot: '#cf7d4a' },
+  { to: '/year',      label: 'Statistics',    dot: '#6f9a86' },
+  { to: '/add',       label: 'Add a Book',    dot: '#d8a13a' },
+  { to: '/kavita',    label: 'Kavita',        dot: '#7a9bbf' },
 ];
 
 const BOTTOM_NAV = [
   { to: '/',          label: 'Overview',  icon: '⌂' },
   { to: '/library',   label: 'Wall',      icon: '⊞' },
+  { to: '/digital',   label: 'Digital',   icon: '▤' },
   { to: '/add',       label: 'Add',       icon: '+' },
   { to: '/streaks',   label: 'Streaks',   icon: '◎' },
   { to: '/year',      label: 'Stats',     icon: '◷' },

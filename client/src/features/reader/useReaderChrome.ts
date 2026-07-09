@@ -4,7 +4,7 @@ const HIDE_DELAY_MS = 2500;
 
 export function useReaderChrome(locked = false) {
   const [visible, setVisible] = useState(true);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const show = useCallback(() => {
     setVisible(true);

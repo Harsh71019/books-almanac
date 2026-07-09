@@ -22,12 +22,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryKey: ['me'],
     queryFn: async () => {
       const token = tokenStore.get();
-      console.log('[auth] queryFn fired — token in localStorage:', token ? `${token.slice(0, 20)}…` : 'NONE');
       if (!token) return null;
       try {
-        const user = await api.get<User>('/auth/me');
-        console.log('[auth] /me success:', user);
-        return user;
+        return await api.get<User>('/auth/me');
       } catch (e) {
         console.error('[auth] /me error:', e);
         if (e instanceof ApiError && e.status === 401) {
@@ -45,7 +42,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     mutationFn: ({ username, password }: { username: string; password: string }) =>
       api.post<LoginResponse>('/auth/login', { username, password }),
     onSuccess: ({ token, ...u }) => {
-      console.log('[auth] login success — storing token, user:', u);
       tokenStore.set(token);
       qc.setQueryData(['me'], u);
     },
@@ -54,7 +50,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logoutMut = useMutation({
     mutationFn: () => api.post('/auth/logout', {}),
     onSuccess: () => {
-      console.log('[auth] logout success — token cleared');
       tokenStore.clear();
       qc.setQueryData(['me'], null);
     },

@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
-import { useStreaks, useCreateSession, useDeleteSession, useSessions } from '@/lib/queries';
+import { useStreaks, useCreateSession, useDeleteSession, useSessions, useBookYears } from '@/lib/queries';
 import { useYear } from '@/features/year/YearContext';
 import type { CalendarDay } from '@/lib/types';
 
@@ -219,15 +219,23 @@ function RecentSessions() {
 
 /* ── Page ── */
 export function StreaksPage() {
-  const { data, isLoading } = useStreaks();
   const { year: contextYear } = useYear();
   const [calYear, setCalYear] = useState(contextYear ?? new Date().getFullYear());
+  const { data, isLoading } = useStreaks(calYear);
+  const { data: bookYears } = useBookYears();
 
   const ss = data ?? { currentStreak: 0, longestStreak: 0, totalReadingDays: 0, totalPagesLogged: 0, calendar: [] };
   const streakHeadline = ss.currentStreak === 0 ? 'Start a new streak today' : ss.currentStreak >= 7 ? "You're on fire" : 'Keep it going';
 
   const streakDigitStyle = { fontFamily: "'Newsreader', serif", fontSize: 92, fontWeight: 500, lineHeight: .9, color: ss.currentStreak > 0 ? '#b15539' : '#bcab8a' };
-  const yearRange = Array.from({ length: 3 }, (_, i) => new Date().getFullYear() - i);
+  // Years with actual reading history (finished books), not just a hardcoded
+  // rolling window — otherwise older years you have real data for (e.g. 2021)
+  // never show up as selectable at all.
+  const yearRange = useMemo(() => {
+    const years = new Set((bookYears ?? []).map(y => y.year));
+    years.add(new Date().getFullYear());
+    return Array.from(years).sort((a, b) => b - a);
+  }, [bookYears]);
 
   return (
     <AppShell>

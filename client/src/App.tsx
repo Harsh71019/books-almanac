@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { QueryClientProvider, useIsFetching } from '@tanstack/react-query';
+import { QueryClientProvider, useIsFetching, useIsRestoring } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AuthProvider, useAuth } from '@/features/auth/AuthContext';
@@ -21,6 +21,7 @@ const AddBookPage   = lazy(() => import('./pages/AddBook').then((m) => ({ defaul
 const StreaksPage   = lazy(() => import('./pages/Streaks').then((m) => ({ default: m.StreaksPage })));
 const ReaderPage        = lazy(() => import('./pages/Reader').then((m) => ({ default: m.ReaderPage })));
 const KavitaBrowserPage = lazy(() => import('./pages/KavitaBrowser').then((m) => ({ default: m.KavitaBrowserPage })));
+const DigitalBooksPage  = lazy(() => import('./pages/DigitalBooks').then((m) => ({ default: m.DigitalBooksPage })));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -41,9 +42,17 @@ function ProtectedRoutes() {
   // Guard against the window where persisted cache has null but a background
   // refetch is in-flight (e.g. stale cached null from a previous logout).
   const authFetching = useIsFetching({ queryKey: ['me'] });
+  // PersistQueryClientProvider pauses ALL query fetching (even ['me'], which
+  // isn't itself persisted — see shouldPersistQuery) until the persisted cache
+  // finishes restoring from localStorage. During that window isLoading and
+  // authFetching both read false (nothing is "fetching", it's paused), while
+  // user is still null — tripping the !user redirect below on every hard
+  // refresh, landing on /login, which then bounces to "/" once the real auth
+  // check resolves a moment later, discarding whatever route we were on.
+  const isRestoring = useIsRestoring();
   const location = useLocation();
 
-  if (isLoading || authFetching > 0) {
+  if (isLoading || authFetching > 0 || isRestoring) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'radial-gradient(120% 120% at 80% 0%, #f3ecdf 0%, #ece2cf 55%, #e6dbc4 100%)' }}>
         <span className="size-6 border-2 border-[var(--gilt)] border-t-transparent rounded-full animate-spin" />
@@ -78,6 +87,7 @@ function ProtectedRoutes() {
                 <Route path="/settings"  element={<SettingsPage />} />
                 <Route path="/books/:id/read" element={<ReaderPage />} />
                 <Route path="/kavita"        element={<KavitaBrowserPage />} />
+                <Route path="/digital"       element={<DigitalBooksPage />} />
                 <Route path="*"          element={<Navigate to="/" replace />} />
               </Routes>
             </motion.div>

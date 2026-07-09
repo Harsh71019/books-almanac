@@ -177,7 +177,8 @@ export const bookBaseSchema = z.object({
   source: z.enum(BOOK_SOURCES).default('manual'),
   hasEpub: z.boolean().default(false),
   epubSize: z.number().int().min(0).nullable().optional(),
-  lastReadCfi: z.string().nullable().optional()
+  lastReadCfi: z.string().nullable().optional(),
+  kavitaSeriesId: z.number().int().nullable().optional()
 });
 
 export const createBookSchema = bookBaseSchema.superRefine((book, ctx) => {
@@ -222,6 +223,7 @@ export const bookQuerySchema = z.object({
   language: z.string().trim().min(1).max(20).optional(),
   author: z.string().trim().min(1).max(160).optional(),
   q: z.string().trim().min(1).max(160).optional(),
+  hasEpub: z.coerce.boolean().optional(),
   sort: z
     .enum(['recently_finished', 'rating', 'page_count', 'title', 'date_added'])
     .default('recently_finished'),
@@ -282,7 +284,7 @@ export const epubProgressSchema = z.object({
 
 export const epubSessionSchema = z.object({
   pagesRead:       z.number().int().min(1).max(5000),
-  durationSeconds: z.number().int().min(1),
+  durationSeconds: z.number().int().min(30, 'Session too short to log'),
   date:            z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD')
 });
 
