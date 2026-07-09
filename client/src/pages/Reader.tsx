@@ -91,6 +91,13 @@ export function ReaderPage() {
   };
 
   // ── fullscreen ───────────────────────────────────────────────────────────────
+  // iOS Safari doesn't implement the Fullscreen API for iPhone (only iPad,
+  // and only for <video>) — requestFullscreen() just silently no-ops there,
+  // by Apple's design, not a bug. Hide the button rather than show a control
+  // that does nothing; the real "fullscreen" on iPhone is installing this
+  // PWA to the home screen (manifest already sets display: "standalone").
+  const supportsFullscreen = !/iPhone|iPod/.test(navigator.userAgent);
+
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -139,7 +146,7 @@ export function ReaderPage() {
         theme={theme}
         visible={chromeVisible}
         onBack={() => navigate(-1)}
-        onFullscreen={toggleFullscreen}
+        onFullscreen={supportsFullscreen ? toggleFullscreen : undefined}
         isFullscreen={isFullscreen}
         onSearch={() => { setSearchOpen(true); setFontPanelOpen(false); setTocPanelOpen(false); }}
         onFontPanel={() => { setFontPanelOpen((v) => !v); setTocPanelOpen(false); }}
