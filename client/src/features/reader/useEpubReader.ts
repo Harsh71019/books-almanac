@@ -197,9 +197,22 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
 
     // Host-document-level listener (outside any iframe) — if this fires but
     // the iframe-level ones below never do, the tap is reaching our page but
-    // not making it into the iframe (size/position/pointer-events issue on
-    // the iframe itself, not a gesture-hijacking issue).
-    const onHostTap = () => { counts.hostTap++; renderDebug(); };
+    // not making it into the iframe. On every host tap, ask the browser
+    // directly what element is actually at that exact point — the most
+    // definitive way to find what's really intercepting it, vs. guessing
+    // at epub.js's internal CSS/layout.
+    const describeElAtPoint = (x: number, y: number) => {
+      const el = document.elementFromPoint(x, y);
+      if (!el) return 'elementFromPoint:null';
+      const cls = typeof el.className === 'string' ? el.className.slice(0, 30) : '';
+      return `elementFromPoint:${el.tagName}${el.id ? `#${el.id}` : ''}${cls ? `.${cls}` : ''}`;
+    };
+    const onHostTap = (e: TouchEvent | MouseEvent) => {
+      counts.hostTap++;
+      const point = 'changedTouches' in e ? e.changedTouches[0] : e;
+      iframeInfo = `${iframeInfo.split(' @')[0]} @ ${describeElAtPoint(point.clientX, point.clientY)}`;
+      renderDebug();
+    };
     viewerEl.addEventListener('touchstart', onHostTap, { passive: true });
     viewerEl.addEventListener('click', onHostTap, { passive: true });
 
@@ -207,9 +220,11 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
       const iframes = viewerEl.querySelectorAll('iframe');
       const rects = Array.from(iframes).map((f) => {
         const r = f.getBoundingClientRect();
-        return `${Math.round(r.width)}x${Math.round(r.height)}`;
+        const cs = getComputedStyle(f);
+        return `${Math.round(r.width)}x${Math.round(r.height)}@(${Math.round(r.left)},${Math.round(r.top)}) pe=${cs.pointerEvents}`;
       });
-      iframeInfo = `iframes:${iframes.length}[${rects.join(',')}]`;
+      const parentCs = viewerEl.parentElement ? getComputedStyle(viewerEl.parentElement) : null;
+      iframeInfo = `iframes:${iframes.length}[${rects.join(',')}] parentOverflow=${parentCs?.overflow} parentTransform=${parentCs?.transform}`;
       renderDebug();
     };
     const iframeObserver = new MutationObserver(reportIframes);
