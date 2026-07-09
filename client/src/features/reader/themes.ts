@@ -83,6 +83,14 @@ export function buildThemeCss(
       'letter-spacing': s.charSpacing ? `${(s.charSpacing * 0.01).toFixed(3)}em !important` : 'normal !important',
       'word-spacing':   s.wordSpacing  ? `${(s.wordSpacing  * 0.01).toFixed(3)}em !important` : 'normal !important',
       'padding':        s.margins      ? `0 ${(s.margins * 0.05).toFixed(2)}em !important`    : '0 !important',
+      // Without these, mobile browsers treat a horizontal swipe over the
+      // reflowable content as a text-selection drag or their own native
+      // back/forward gesture, swallowing it before our touchstart/touchend
+      // swipe handler (useEpubReader.ts) ever sees a clean gesture.
+      'touch-action':          'pan-y !important',
+      'user-select':           'none !important',
+      '-webkit-user-select':   'none !important',
+      '-webkit-touch-callout': 'none !important',
     },
     'h1,h2,h3,h4': {
       ...base['h1,h2,h3,h4'],

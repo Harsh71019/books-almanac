@@ -190,13 +190,14 @@ export function ReaderPage() {
           bottom: 76,
           left:   isSpread ? 16 : 0,
           right:  isSpread ? 16 : 0,
+          touchAction: 'pan-y',
           ...pageAnimStyle,
         }}
       >
         <div
           ref={viewerRef}
           className="h-full transition-colors duration-300"
-          style={{ width: '100%', maxWidth: isSpread ? 'none' : 900 }}
+          style={{ width: '100%', maxWidth: isSpread ? 'none' : 900, touchAction: 'pan-y' }}
         />
 
         {/* Subtle spine shadow in spread mode */}
