@@ -78,6 +78,50 @@ export function ReaderPage() {
     setSwipeHandlers({ next: triggerNext, prev: triggerPrev });
   }, [setSwipeHandlers, triggerNext, triggerPrev]);
 
+  // TEMP diagnostic — capture-phase listener on window fires before ANY
+  // other handler on the page can intercept/stop it, and device/viewport
+  // info rules out capability gaps. This is the most powerful single test:
+  // if this never fires, nothing on the page is receiving touches at all.
+  useEffect(() => {
+    const nav = navigator as Navigator & { standalone?: boolean };
+    captureDebug('[reader-touch-debug] DEVICE INFO', {
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      visualViewportWidth: window.visualViewport?.width,
+      visualViewportHeight: window.visualViewport?.height,
+      devicePixelRatio: window.devicePixelRatio,
+      hasOntouchstart: 'ontouchstart' in window,
+      maxTouchPoints: nav.maxTouchPoints,
+      standalonePWA: nav.standalone,
+      userAgent: nav.userAgent,
+    });
+
+    let n = 0;
+    const onGlobalTouch = (e: TouchEvent) => {
+      n++;
+      const t = e.changedTouches[0];
+      const target = e.target as HTMLElement | null;
+      captureDebug(`[reader-touch-debug] GLOBAL CAPTURE touchstart #${n}`, {
+        x: Math.round(t.clientX), y: Math.round(t.clientY),
+        target: target ? `${target.tagName}${target.id ? '#' + target.id : ''}` : 'null',
+      });
+    };
+    const onGlobalClick = (e: MouseEvent) => {
+      n++;
+      const target = e.target as HTMLElement | null;
+      captureDebug(`[reader-touch-debug] GLOBAL CAPTURE click #${n}`, {
+        x: Math.round(e.clientX), y: Math.round(e.clientY),
+        target: target ? `${target.tagName}${target.id ? '#' + target.id : ''}` : 'null',
+      });
+    };
+    window.addEventListener('touchstart', onGlobalTouch, { capture: true, passive: true });
+    window.addEventListener('click', onGlobalClick, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener('touchstart', onGlobalTouch, { capture: true });
+      window.removeEventListener('click', onGlobalClick, { capture: true });
+    };
+  }, []);
+
   // Keyboard navigation (animated, lives here because it uses triggerNext/Prev)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
