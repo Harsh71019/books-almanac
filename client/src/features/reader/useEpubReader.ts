@@ -145,7 +145,8 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
 
   // Epub lifecycle
   useEffect(() => {
-    if (!viewerRef.current || !id || !ready) return;
+    const viewerEl = viewerRef.current;
+    if (!viewerEl || !id || !ready) return;
 
     let cancelled = false;
 
@@ -157,7 +158,7 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
     });
     bookRef.current = epubBook;
 
-    const rendition = epubBook.renderTo(viewerRef.current, {
+    const rendition = epubBook.renderTo(viewerEl, {
       width:          '100%',
       height:         '100%',
       spread:         fontSettings.pageLayout === 'spread' ? 'auto' : 'none',
@@ -185,11 +186,32 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
     const SWIPE_THRESHOLD_PX = 40;
     let touchStartX: number | null = null;
     const attachedDocs = new WeakSet<Document>();
-    const counts = { touchstart: 0, touchend: 0, click: 0, pointerdown: 0, views: 0 };
+    const counts = { touchstart: 0, touchend: 0, click: 0, pointerdown: 0, views: 0, hostTap: 0 };
+    let iframeInfo = 'iframes:?';
     const renderDebug = () =>
       setTouchDebug(
-        `views:${counts.views} touchstart:${counts.touchstart} touchend:${counts.touchend} click:${counts.click} pointerdown:${counts.pointerdown}`
+        `${iframeInfo} views:${counts.views} host:${counts.hostTap} touch:${counts.touchstart}/${counts.touchend} click:${counts.click} ptr:${counts.pointerdown}`
       );
+
+    // Host-document-level listener (outside any iframe) — if this fires but
+    // the iframe-level ones below never do, the tap is reaching our page but
+    // not making it into the iframe (size/position/pointer-events issue on
+    // the iframe itself, not a gesture-hijacking issue).
+    const onHostTap = () => { counts.hostTap++; renderDebug(); };
+    viewerEl.addEventListener('touchstart', onHostTap, { passive: true });
+    viewerEl.addEventListener('click', onHostTap, { passive: true });
+
+    const reportIframes = () => {
+      const iframes = viewerEl.querySelectorAll('iframe');
+      const rects = Array.from(iframes).map((f) => {
+        const r = f.getBoundingClientRect();
+        return `${Math.round(r.width)}x${Math.round(r.height)}`;
+      });
+      iframeInfo = `iframes:${iframes.length}[${rects.join(',')}]`;
+      renderDebug();
+    };
+    const iframeObserver = new MutationObserver(reportIframes);
+    iframeObserver.observe(viewerEl, { childList: true, subtree: true });
 
     const onTouchStart = (e: TouchEvent) => {
       counts.touchstart++;
@@ -209,6 +231,7 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
     const onPointerDown = () => { counts.pointerdown++; renderDebug(); };
 
     rendition.on('rendered', () => {
+      reportIframes();
       const views = (rendition as unknown as { manager?: { views?: { all: () => { document?: Document }[] } } })
         .manager?.views?.all() ?? [];
       for (const view of views) {
@@ -347,6 +370,9 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
 
     return () => {
       cancelled = true;
+      iframeObserver.disconnect();
+      viewerEl.removeEventListener('touchstart', onHostTap);
+      viewerEl.removeEventListener('click', onHostTap);
       window.removeEventListener('beforeunload', flushSession);
       flushSession();
       epubBook.destroy();
