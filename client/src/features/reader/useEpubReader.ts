@@ -185,23 +185,28 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
     const SWIPE_THRESHOLD_PX = 40;
     let touchStartX: number | null = null;
     const attachedDocs = new WeakSet<Document>();
+    const counts = { touchstart: 0, touchend: 0, click: 0, pointerdown: 0, views: 0 };
+    const renderDebug = () =>
+      setTouchDebug(
+        `views:${counts.views} touchstart:${counts.touchstart} touchend:${counts.touchend} click:${counts.click} pointerdown:${counts.pointerdown}`
+      );
 
     const onTouchStart = (e: TouchEvent) => {
+      counts.touchstart++;
       touchStartX = e.changedTouches[0].screenX;
-      setTouchDebug(`touchstart @ ${Math.round(touchStartX)}`);
+      renderDebug();
     };
     const onTouchEnd = (e: TouchEvent) => {
-      if (touchStartX == null) {
-        setTouchDebug('touchend (no start recorded)');
-        return;
-      }
-      const endX   = e.changedTouches[0].screenX;
-      const deltaX = endX - touchStartX;
+      counts.touchend++;
+      if (touchStartX == null) { renderDebug(); return; }
+      const deltaX = e.changedTouches[0].screenX - touchStartX;
       touchStartX = null;
-      setTouchDebug(`touchend delta=${Math.round(deltaX)} (threshold ${SWIPE_THRESHOLD_PX})`);
+      renderDebug();
       if (deltaX > SWIPE_THRESHOLD_PX) (swipePrevRef.current ?? (() => rendition.prev()))();
       else if (deltaX < -SWIPE_THRESHOLD_PX) (swipeNextRef.current ?? (() => rendition.next()))();
     };
+    const onClick = () => { counts.click++; renderDebug(); };
+    const onPointerDown = () => { counts.pointerdown++; renderDebug(); };
 
     rendition.on('rendered', () => {
       const views = (rendition as unknown as { manager?: { views?: { all: () => { document?: Document }[] } } })
@@ -210,9 +215,12 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
         const doc = view.document;
         if (!doc || attachedDocs.has(doc)) continue;
         attachedDocs.add(doc);
+        counts.views++;
         doc.addEventListener('touchstart', onTouchStart, { passive: true });
         doc.addEventListener('touchend', onTouchEnd, { passive: true });
-        setTouchDebug((prev) => `${prev} | attached to a view`);
+        doc.addEventListener('click', onClick, { passive: true });
+        doc.addEventListener('pointerdown', onPointerDown, { passive: true });
+        renderDebug();
       }
     });
 
