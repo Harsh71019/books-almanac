@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useBook } from '@/lib/queries';
+import { captureDebug } from '@/lib/sentry';
 import {
   useEpubReader,
   useReaderChrome,
@@ -30,6 +31,8 @@ export function ReaderPage() {
   const [tocPanelOpen,   setTocPanelOpen]   = useState(false);
   const [searchOpen,     setSearchOpen]     = useState(false);
   const [activePresetId, setActivePresetId] = useState<string | null>('paper');
+  // TEMP diagnostic — baseline sanity check, no epub.js/iframe involved at all.
+  const [testTapCount,   setTestTapCount]   = useState(0);
 
   // Two-page spread doesn't fit on a phone screen — hide the option and force
   // single-page there, without touching the user's saved desktop preference.
@@ -145,6 +148,22 @@ export function ReaderPage() {
       >
         {touchDebug}
       </div>
+
+      {/* TEMP diagnostic — plain React onClick button, nothing to do with
+          epub.js or iframes. If this doesn't respond to a tap, the issue
+          isn't epub-specific at all. */}
+      <button
+        onClick={() => { setTestTapCount((c) => c + 1); captureDebug('[reader-touch-debug] TEST BUTTON click'); }}
+        onTouchStart={() => { setTestTapCount((c) => c + 1); captureDebug('[reader-touch-debug] TEST BUTTON touchstart'); }}
+        style={{
+          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          zIndex: 998, width: 160, height: 90,
+          background: '#39ff14', color: '#000',
+          fontSize: 16, fontWeight: 700, border: '4px solid #000', borderRadius: 12,
+        }}
+      >
+        TAP ME<br />{testTapCount}
+      </button>
 
       {/* Top bar */}
       <ReaderTopBar
