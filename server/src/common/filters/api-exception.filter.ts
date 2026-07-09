@@ -9,6 +9,7 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { PinoLogger } from 'nestjs-pino';
 import { ZodValidationException } from 'nestjs-zod';
+import * as Sentry from '@sentry/node';
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
@@ -59,6 +60,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
         { err: exception, path: request.url, method: request.method, status },
         'Unhandled API exception'
       );
+      Sentry.captureException(exception, { extra: { path: request.url, method: request.method } });
     } else {
       this.logger.warn(
         { path: request.url, method: request.method, status, code, message },

@@ -6,6 +6,10 @@ COPY client/package.json client/package.json
 RUN npm ci
 COPY shared shared
 COPY client client
+# Vite bakes VITE_* vars into the bundle at build time, not runtime — has to
+# arrive as a build arg, a plain container env var wouldn't be seen by vite build.
+ARG VITE_GLITCHTIP_DSN
+ENV VITE_GLITCHTIP_DSN=$VITE_GLITCHTIP_DSN
 RUN npm run build -w shared && npm run build -w client
 
 FROM nginx:1.29-alpine AS runtime

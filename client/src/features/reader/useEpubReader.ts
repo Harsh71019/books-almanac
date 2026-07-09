@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import ePub, { Book, Rendition } from 'epubjs';
 import type { NavItem } from 'epubjs';
 import { tokenStore } from '@/lib/api';
+import { captureDebug } from '@/lib/sentry';
 import { useSaveEpubProgress, useLogEpubSession } from '@/lib/queries';
 import { buildThemeCss } from './themes';
 import type { Theme, FontSettings } from './types';
@@ -188,10 +189,11 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
     const attachedDocs = new WeakSet<Document>();
     const counts = { touchstart: 0, touchend: 0, click: 0, pointerdown: 0, views: 0, hostTap: 0 };
     let iframeInfo = 'iframes:?';
-    const renderDebug = () =>
-      setTouchDebug(
-        `${iframeInfo} views:${counts.views} host:${counts.hostTap} touch:${counts.touchstart}/${counts.touchend} click:${counts.click} ptr:${counts.pointerdown}`
-      );
+    const renderDebug = () => {
+      const msg = `${iframeInfo} views:${counts.views} host:${counts.hostTap} touch:${counts.touchstart}/${counts.touchend} click:${counts.click} ptr:${counts.pointerdown}`;
+      setTouchDebug(msg);
+      captureDebug(`[reader-touch-debug] ${msg}`, { ...counts, iframeInfo });
+    };
 
     // Host-document-level listener (outside any iframe) — if this fires but
     // the iframe-level ones below never do, the tap is reaching our page but

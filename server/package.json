@@ -23,6 +23,7 @@
     "@nestjs/platform-express": "^11.1.3",
     "@nestjs/serve-static": "^5.0.3",
     "@reading-almanac/shared": "file:../shared",
+    "@sentry/node": "^10.64.0",
     "bcrypt": "^6.0.0",
     "helmet": "^8.1.0",
     "mongoose": "^8.16.1",

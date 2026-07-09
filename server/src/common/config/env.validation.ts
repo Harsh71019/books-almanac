@@ -12,7 +12,8 @@ export const envSchema = z.object({
   ADMIN_DISPLAY_NAME: z.string().min(1).default('Reader'),
   UPLOAD_DIR: z.string().min(1).default('uploads'),
   PUBLIC_UPLOAD_PATH: z.string().min(1).default('/uploads'),
-  CLIENT_BUILD_DIR: z.string().min(1).default('client/dist')
+  CLIENT_BUILD_DIR: z.string().min(1).default('client/dist'),
+  GLITCHTIP_DSN: z.string().optional()
 });
 
 export type Env = z.infer<typeof envSchema>;
