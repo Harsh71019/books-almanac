@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useBook } from '@/lib/queries';
-import { captureDebug } from '@/lib/sentry';
 import {
   useEpubReader,
   useReaderChrome,
@@ -31,8 +30,6 @@ export function ReaderPage() {
   const [tocPanelOpen,   setTocPanelOpen]   = useState(false);
   const [searchOpen,     setSearchOpen]     = useState(false);
   const [activePresetId, setActivePresetId] = useState<string | null>('paper');
-  // TEMP diagnostic — baseline sanity check, no epub.js/iframe involved at all.
-  const [testTapCount,   setTestTapCount]   = useState(0);
 
   // Two-page spread doesn't fit on a phone screen — hide the option and force
   // single-page there, without touching the user's saved desktop preference.
@@ -66,7 +63,6 @@ export function ReaderPage() {
     goTo,
     search,
     setSwipeHandlers,
-    touchDebug,
   } = useEpubReader({ id: id!, lastReadCfi: book?.lastReadCfi, pageCount: book?.pageCount, fontSettings: effectiveSettings, ready: !!book });
 
   const { triggerNext, triggerPrev, pageAnimStyle } = usePageTurn(prev, next, loading);
@@ -77,50 +73,6 @@ export function ReaderPage() {
   useEffect(() => {
     setSwipeHandlers({ next: triggerNext, prev: triggerPrev });
   }, [setSwipeHandlers, triggerNext, triggerPrev]);
-
-  // TEMP diagnostic — capture-phase listener on window fires before ANY
-  // other handler on the page can intercept/stop it, and device/viewport
-  // info rules out capability gaps. This is the most powerful single test:
-  // if this never fires, nothing on the page is receiving touches at all.
-  useEffect(() => {
-    const nav = navigator as Navigator & { standalone?: boolean };
-    captureDebug('[reader-touch-debug] DEVICE INFO', {
-      innerWidth: window.innerWidth,
-      innerHeight: window.innerHeight,
-      visualViewportWidth: window.visualViewport?.width,
-      visualViewportHeight: window.visualViewport?.height,
-      devicePixelRatio: window.devicePixelRatio,
-      hasOntouchstart: 'ontouchstart' in window,
-      maxTouchPoints: nav.maxTouchPoints,
-      standalonePWA: nav.standalone,
-      userAgent: nav.userAgent,
-    });
-
-    let n = 0;
-    const onGlobalTouch = (e: TouchEvent) => {
-      n++;
-      const t = e.changedTouches[0];
-      const target = e.target as HTMLElement | null;
-      captureDebug(`[reader-touch-debug] GLOBAL CAPTURE touchstart #${n}`, {
-        x: Math.round(t.clientX), y: Math.round(t.clientY),
-        target: target ? `${target.tagName}${target.id ? '#' + target.id : ''}` : 'null',
-      });
-    };
-    const onGlobalClick = (e: MouseEvent) => {
-      n++;
-      const target = e.target as HTMLElement | null;
-      captureDebug(`[reader-touch-debug] GLOBAL CAPTURE click #${n}`, {
-        x: Math.round(e.clientX), y: Math.round(e.clientY),
-        target: target ? `${target.tagName}${target.id ? '#' + target.id : ''}` : 'null',
-      });
-    };
-    window.addEventListener('touchstart', onGlobalTouch, { capture: true, passive: true });
-    window.addEventListener('click', onGlobalClick, { capture: true, passive: true });
-    return () => {
-      window.removeEventListener('touchstart', onGlobalTouch, { capture: true });
-      window.removeEventListener('click', onGlobalClick, { capture: true });
-    };
-  }, []);
 
   // Keyboard navigation (animated, lives here because it uses triggerNext/Prev)
   useEffect(() => {
@@ -180,34 +132,6 @@ export function ReaderPage() {
   return (
     // Use t.page for the shell so the epub blends seamlessly into the background
     <div className="fixed inset-0 transition-colors duration-300" style={{ background: t.page }}>
-
-      {/* TEMP diagnostic banner — remove once swipe is confirmed working on-device */}
-      <div
-        style={{
-          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 999,
-          background: 'rgba(255,0,0,0.85)', color: '#fff',
-          fontSize: 11, fontFamily: 'monospace', padding: '3px 6px',
-          textAlign: 'center', pointerEvents: 'none',
-        }}
-      >
-        {touchDebug}
-      </div>
-
-      {/* TEMP diagnostic — plain React onClick button, nothing to do with
-          epub.js or iframes. If this doesn't respond to a tap, the issue
-          isn't epub-specific at all. */}
-      <button
-        onClick={() => { setTestTapCount((c) => c + 1); captureDebug('[reader-touch-debug] TEST BUTTON click'); }}
-        onTouchStart={() => { setTestTapCount((c) => c + 1); captureDebug('[reader-touch-debug] TEST BUTTON touchstart'); }}
-        style={{
-          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-          zIndex: 998, width: 160, height: 90,
-          background: '#39ff14', color: '#000',
-          fontSize: 16, fontWeight: 700, border: '4px solid #000', borderRadius: 12,
-        }}
-      >
-        TAP ME<br />{testTapCount}
-      </button>
 
       {/* Top bar */}
       <ReaderTopBar

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import ePub, { Book, Rendition } from 'epubjs';
 import type { NavItem } from 'epubjs';
 import { tokenStore } from '@/lib/api';
-import { captureDebug } from '@/lib/sentry';
 import { useSaveEpubProgress, useLogEpubSession } from '@/lib/queries';
 import { buildThemeCss } from './themes';
 import type { Theme, FontSettings } from './types';
@@ -95,8 +94,6 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
   const [locationIndex,  setLocationIndex]  = useState<number | null>(null);
   const [totalLocations, setTotalLocations] = useState<number | null>(null);
   const [toc,            setToc]            = useState<NavItem[]>([]);
-  // TEMP diagnostic — remove once swipe is confirmed working on-device.
-  const [touchDebug,     setTouchDebug]     = useState('no touch yet');
 
   const applyTheme = useCallback((t: Theme) => {
     setThemeState(t);
@@ -187,86 +184,34 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
 
     // Swipe-to-turn-page on touch devices — the click-zone nav strips outside
     // the iframe are narrow on mobile, so swipe is the primary touch gesture.
-    // Attach listeners directly on each rendered section's iframe document
-    // rather than relying on epubjs's rendition.on('touchstart'/'touchend')
-    // passEvents forwarding, which turned out unreliable in practice — this
-    // talks straight to the real DOM event, no intermediary to debug.
+    // Attach listeners directly on each rendered section's real iframe
+    // document (found via querySelectorAll, not epubjs's internal
+    // manager.views bookkeeping) rather than epubjs's own
+    // rendition.on('touchstart'/'touchend') forwarding.
     const SWIPE_THRESHOLD_PX = 40;
     let touchStartX: number | null = null;
     const attachedDocs = new WeakSet<Document>();
-    const counts = { touchstart: 0, touchend: 0, click: 0, pointerdown: 0, views: 0, hostTap: 0 };
-    let iframeInfo = 'iframes:?';
-    const renderDebug = () => {
-      const msg = `${iframeInfo} views:${counts.views} host:${counts.hostTap} touch:${counts.touchstart}/${counts.touchend} click:${counts.click} ptr:${counts.pointerdown}`;
-      setTouchDebug(msg);
-      captureDebug(`[reader-touch-debug] ${msg}`, { ...counts, iframeInfo });
-    };
-
-    // Host-document-level listener (outside any iframe) — if this fires but
-    // the iframe-level ones below never do, the tap is reaching our page but
-    // not making it into the iframe. On every host tap, ask the browser
-    // directly what element is actually at that exact point — the most
-    // definitive way to find what's really intercepting it, vs. guessing
-    // at epub.js's internal CSS/layout.
-    const describeElAtPoint = (x: number, y: number) => {
-      const el = document.elementFromPoint(x, y);
-      if (!el) return 'elementFromPoint:null';
-      const cls = typeof el.className === 'string' ? el.className.slice(0, 30) : '';
-      return `elementFromPoint:${el.tagName}${el.id ? `#${el.id}` : ''}${cls ? `.${cls}` : ''}`;
-    };
-    const onHostTap = (e: TouchEvent | MouseEvent) => {
-      counts.hostTap++;
-      const point = 'changedTouches' in e ? e.changedTouches[0] : e;
-      iframeInfo = `${iframeInfo.split(' @')[0]} @ ${describeElAtPoint(point.clientX, point.clientY)}`;
-      renderDebug();
-    };
-    viewerEl.addEventListener('touchstart', onHostTap, { passive: true });
-    viewerEl.addEventListener('click', onHostTap, { passive: true });
 
     const onTouchStart = (e: TouchEvent) => {
-      counts.touchstart++;
       touchStartX = e.changedTouches[0].screenX;
-      renderDebug();
     };
     const onTouchEnd = (e: TouchEvent) => {
-      counts.touchend++;
-      if (touchStartX == null) { renderDebug(); return; }
+      if (touchStartX == null) return;
       const deltaX = e.changedTouches[0].screenX - touchStartX;
       touchStartX = null;
-      renderDebug();
       if (deltaX > SWIPE_THRESHOLD_PX) (swipePrevRef.current ?? (() => rendition.prev()))();
       else if (deltaX < -SWIPE_THRESHOLD_PX) (swipeNextRef.current ?? (() => rendition.next()))();
     };
-    const onClick = () => { counts.click++; renderDebug(); };
-    const onPointerDown = () => { counts.pointerdown++; renderDebug(); };
 
-    // Attach straight to the real <iframe> elements found via querySelectorAll
-    // (the same ones whose geometry we log) rather than trusting epubjs's
-    // internal manager.views.all() bookkeeping to point at the currently
-    // live/visible document — removes any chance of attaching to a stale
-    // or wrong iframe reference.
     const scanIframes = () => {
-      const iframes = viewerEl.querySelectorAll('iframe');
-      const rects = Array.from(iframes).map((f) => {
-        const r = f.getBoundingClientRect();
-        const cs = getComputedStyle(f);
-        return `${Math.round(r.width)}x${Math.round(r.height)}@(${Math.round(r.left)},${Math.round(r.top)}) pe=${cs.pointerEvents}`;
-      });
-      const parentCs = viewerEl.parentElement ? getComputedStyle(viewerEl.parentElement) : null;
-      iframeInfo = `iframes:${iframes.length}[${rects.join(',')}] parentOverflow=${parentCs?.overflow} parentTransform=${parentCs?.transform}`;
-
-      iframes.forEach((f) => {
+      viewerEl.querySelectorAll('iframe').forEach((f) => {
         let doc: Document | null = null;
-        try { doc = f.contentDocument; } catch { /* cross-origin, shouldn't happen (same-origin blob/data src) */ }
+        try { doc = f.contentDocument; } catch { /* cross-origin, shouldn't happen (same-origin blob src) */ }
         if (!doc || attachedDocs.has(doc)) return;
         attachedDocs.add(doc);
-        counts.views++;
         doc.addEventListener('touchstart', onTouchStart, { passive: true });
         doc.addEventListener('touchend', onTouchEnd, { passive: true });
-        doc.addEventListener('click', onClick, { passive: true });
-        doc.addEventListener('pointerdown', onPointerDown, { passive: true });
       });
-      renderDebug();
     };
     const iframeObserver = new MutationObserver(scanIframes);
     iframeObserver.observe(viewerEl, { childList: true, subtree: true });
@@ -401,8 +346,6 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
       cancelled = true;
       iframeObserver.disconnect();
       clearInterval(iframePoll);
-      viewerEl.removeEventListener('touchstart', onHostTap);
-      viewerEl.removeEventListener('click', onHostTap);
       window.removeEventListener('beforeunload', flushSession);
       flushSession();
       epubBook.destroy();
@@ -468,6 +411,5 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
     goTo,
     search,
     setSwipeHandlers,
-    touchDebug,
   };
 }

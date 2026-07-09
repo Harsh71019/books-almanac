@@ -11,9 +11,9 @@ export function initSentry() {
   });
 }
 
-// Fires a standalone event (shows up as its own issue in Glitchtip) rather
-// than a breadcrumb, so on-device debugging doesn't need phone screenshots —
-// check the Glitchtip dashboard instead.
+// General-purpose ad-hoc debug utility — fires a standalone event (its own
+// issue in Glitchtip) rather than a breadcrumb, useful for diagnosing
+// on-device issues (e.g. iOS Safari) without needing phone screenshots.
 export function captureDebug(message: string, extra?: Record<string, unknown>) {
   if (!dsn) return;
   Sentry.captureMessage(message, { level: 'info', extra });
