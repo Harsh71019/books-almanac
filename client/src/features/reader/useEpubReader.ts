@@ -165,6 +165,13 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
       spread:         fontSettings.pageLayout === 'spread' ? 'auto' : 'none',
       flow:           'paginated',
       minSpreadWidth: 900,
+      // Without this, epubjs's per-chapter iframes are sandboxed as
+      // sandbox="allow-same-origin" only (no allow-scripts) — per the HTML
+      // spec, a script-sandboxed browsing context doesn't dispatch/process
+      // events at all, even for listeners attached from the parent page
+      // reaching in via contentDocument. That's why touch/click/pointerdown
+      // never fired inside the reading area no matter what was attached.
+      allowScriptedContent: true,
     });
     renditionRef.current = rendition;
 
