@@ -62,9 +62,17 @@ export function ReaderPage() {
     toc,
     goTo,
     search,
+    setSwipeHandlers,
   } = useEpubReader({ id: id!, lastReadCfi: book?.lastReadCfi, pageCount: book?.pageCount, fontSettings: effectiveSettings, ready: !!book });
 
   const { triggerNext, triggerPrev, pageAnimStyle } = usePageTurn(prev, next, loading);
+
+  // Route swipe-triggered page turns through the same animated
+  // triggerNext/triggerPrev as keyboard/click-zone navigation, instead of
+  // useEpubReader's un-animated direct fallback.
+  useEffect(() => {
+    setSwipeHandlers({ next: triggerNext, prev: triggerPrev });
+  }, [setSwipeHandlers, triggerNext, triggerPrev]);
 
   // Keyboard navigation (animated, lives here because it uses triggerNext/Prev)
   useEffect(() => {

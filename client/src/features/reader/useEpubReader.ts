@@ -54,6 +54,19 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
   const bookRef      = useRef<Book | null>(null);
   const renditionRef = useRef<Rendition | null>(null);
 
+  // Lets the caller (Reader.tsx) route swipe-triggered navigation through its
+  // own animated triggerNext/triggerPrev (usePageTurn) instead of calling
+  // rendition.next()/prev() directly, which would skip the page-turn
+  // animation. Set via setSwipeHandlers below, from a useEffect that runs
+  // after usePageTurn — which itself depends on this hook's own prev/next —
+  // is constructed, so it can't be passed in as a plain option at call time.
+  const swipeNextRef = useRef<(() => void) | null>(null);
+  const swipePrevRef = useRef<(() => void) | null>(null);
+  const setSwipeHandlers = useCallback((handlers: { next: () => void; prev: () => void }) => {
+    swipeNextRef.current = handlers.next;
+    swipePrevRef.current = handlers.prev;
+  }, []);
+
   const saveProgress = useSaveEpubProgress();
   const logSession    = useLogEpubSession();
 
@@ -174,8 +187,10 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
       if (touchStartX == null) return;
       const deltaX = e.changedTouches[0].screenX - touchStartX;
       touchStartX = null;
-      if (deltaX > SWIPE_THRESHOLD_PX) rendition.prev();
-      else if (deltaX < -SWIPE_THRESHOLD_PX) rendition.next();
+      // Prefer the caller's animated trigger (usePageTurn) if wired up;
+      // fall back to a direct page turn otherwise.
+      if (deltaX > SWIPE_THRESHOLD_PX) (swipePrevRef.current ?? (() => rendition.prev()))();
+      else if (deltaX < -SWIPE_THRESHOLD_PX) (swipeNextRef.current ?? (() => rendition.next()))();
     });
 
     // Reading-session bookkeeping for this mount only (one reader open = one sitting)
@@ -365,5 +380,6 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
     toc,
     goTo,
     search,
+    setSwipeHandlers,
   };
 }
