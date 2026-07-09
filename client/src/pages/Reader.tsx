@@ -63,6 +63,7 @@ export function ReaderPage() {
     goTo,
     search,
     setSwipeHandlers,
+    touchDebug,
   } = useEpubReader({ id: id!, lastReadCfi: book?.lastReadCfi, pageCount: book?.pageCount, fontSettings: effectiveSettings, ready: !!book });
 
   const { triggerNext, triggerPrev, pageAnimStyle } = usePageTurn(prev, next, loading);
@@ -132,6 +133,18 @@ export function ReaderPage() {
   return (
     // Use t.page for the shell so the epub blends seamlessly into the background
     <div className="fixed inset-0 transition-colors duration-300" style={{ background: t.page }}>
+
+      {/* TEMP diagnostic banner — remove once swipe is confirmed working on-device */}
+      <div
+        style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 999,
+          background: 'rgba(255,0,0,0.85)', color: '#fff',
+          fontSize: 11, fontFamily: 'monospace', padding: '3px 6px',
+          textAlign: 'center', pointerEvents: 'none',
+        }}
+      >
+        {touchDebug}
+      </div>
 
       {/* Top bar */}
       <ReaderTopBar

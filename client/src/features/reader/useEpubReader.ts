@@ -94,6 +94,8 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
   const [locationIndex,  setLocationIndex]  = useState<number | null>(null);
   const [totalLocations, setTotalLocations] = useState<number | null>(null);
   const [toc,            setToc]            = useState<NavItem[]>([]);
+  // TEMP diagnostic — remove once swipe is confirmed working on-device.
+  const [touchDebug,     setTouchDebug]     = useState('no touch yet');
 
   const applyTheme = useCallback((t: Theme) => {
     setThemeState(t);
@@ -176,21 +178,42 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
 
     // Swipe-to-turn-page on touch devices — the click-zone nav strips outside
     // the iframe are narrow on mobile, so swipe is the primary touch gesture.
-    // epubjs forwards iframe touch events onto the rendition via the same
-    // passEvents mechanism used for keydown above; there's no built-in swipe.
+    // Attach listeners directly on each rendered section's iframe document
+    // rather than relying on epubjs's rendition.on('touchstart'/'touchend')
+    // passEvents forwarding, which turned out unreliable in practice — this
+    // talks straight to the real DOM event, no intermediary to debug.
     const SWIPE_THRESHOLD_PX = 40;
     let touchStartX: number | null = null;
-    rendition.on('touchstart', (e: TouchEvent) => {
+    const attachedDocs = new WeakSet<Document>();
+
+    const onTouchStart = (e: TouchEvent) => {
       touchStartX = e.changedTouches[0].screenX;
-    });
-    rendition.on('touchend', (e: TouchEvent) => {
-      if (touchStartX == null) return;
-      const deltaX = e.changedTouches[0].screenX - touchStartX;
+      setTouchDebug(`touchstart @ ${Math.round(touchStartX)}`);
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (touchStartX == null) {
+        setTouchDebug('touchend (no start recorded)');
+        return;
+      }
+      const endX   = e.changedTouches[0].screenX;
+      const deltaX = endX - touchStartX;
       touchStartX = null;
-      // Prefer the caller's animated trigger (usePageTurn) if wired up;
-      // fall back to a direct page turn otherwise.
+      setTouchDebug(`touchend delta=${Math.round(deltaX)} (threshold ${SWIPE_THRESHOLD_PX})`);
       if (deltaX > SWIPE_THRESHOLD_PX) (swipePrevRef.current ?? (() => rendition.prev()))();
       else if (deltaX < -SWIPE_THRESHOLD_PX) (swipeNextRef.current ?? (() => rendition.next()))();
+    };
+
+    rendition.on('rendered', () => {
+      const views = (rendition as unknown as { manager?: { views?: { all: () => { document?: Document }[] } } })
+        .manager?.views?.all() ?? [];
+      for (const view of views) {
+        const doc = view.document;
+        if (!doc || attachedDocs.has(doc)) continue;
+        attachedDocs.add(doc);
+        doc.addEventListener('touchstart', onTouchStart, { passive: true });
+        doc.addEventListener('touchend', onTouchEnd, { passive: true });
+        setTouchDebug((prev) => `${prev} | attached to a view`);
+      }
     });
 
     // Reading-session bookkeeping for this mount only (one reader open = one sitting)
@@ -381,5 +404,6 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
     goTo,
     search,
     setSwipeHandlers,
+    touchDebug,
   };
 }
