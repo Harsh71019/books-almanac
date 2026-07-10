@@ -55,17 +55,20 @@ export class ApiExceptionFilter implements ExceptionFilter {
       message = 'Invalid URL provided';
     }
 
+    // Never include req.body here — several routes (Kavita browse/import,
+    // login) carry passwords in the body, and this filter is @Catch()-wide.
+    const context = { path: request.url, method: request.method, status, code };
+
     if (status >= 500) {
-      this.logger.error(
-        { err: exception, path: request.url, method: request.method, status },
-        'Unhandled API exception'
-      );
-      Sentry.captureException(exception, { extra: { path: request.url, method: request.method } });
+      this.logger.error({ err: exception, ...context }, 'Unhandled API exception');
+      Sentry.captureException(exception, { level: 'error', extra: context });
     } else {
-      this.logger.warn(
-        { path: request.url, method: request.method, status, code, message },
-        'Client error'
-      );
+      this.logger.warn({ ...context, message }, 'Client error');
+      // 4xx are often still worth alerting on for a single-user app (e.g. a
+      // Kavita import failing with a 502/400 is a real, actionable failure,
+      // not routine user error like a wrong login password) — captured as
+      // 'warning' so they're visually distinct from real 5xx in Glitchtip.
+      Sentry.captureMessage(`${code}: ${message}`, { level: 'warning', extra: context });
     }
 
     response.status(status).json({

@@ -2,9 +2,17 @@ import { BadGatewayException, BadRequestException, Injectable, UnauthorizedExcep
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
+import * as Sentry from '@sentry/node';
 import { resolveConfiguredPath } from '../common/utils/paths';
 import { BooksService } from '../books/books.service';
 import { CoverCacheService } from '../uploads/cover-cache.service';
+
+// Breadcrumbs attach to whatever Sentry event gets captured next (the
+// eventual ApiExceptionFilter capture on failure) — never include
+// username/password/jwt here, only non-sensitive step/identifier info.
+function trace(message: string, data?: Record<string, unknown>) {
+  Sentry.addBreadcrumb({ category: 'kavita', message, data, level: 'info' });
+}
 
 const kavitaLoginResponseSchema = z.object({
   token: z.string().min(1),
@@ -82,13 +90,15 @@ export class KavitaService {
   ) {}
 
   async login(url: string, username: string, password: string): Promise<KavitaAuth> {
+    trace('login: requesting', { url });
     const res = await fetch(`${url}/api/Account/login`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ username, password }),
       signal: AbortSignal.timeout(10_000)
-    }).catch(() => { throw new BadGatewayException(`Cannot reach Kavita at ${url}`); });
+    }).catch((err) => { trace('login: network error', { url, err: String(err) }); throw new BadGatewayException(`Cannot reach Kavita at ${url}`); });
 
+    trace('login: response received', { url, status: res.status });
     if (res.status === 401) throw new UnauthorizedException('Invalid Kavita username or password');
     if (!res.ok) throw new BadGatewayException(`Kavita login failed: ${res.status}`);
 
@@ -143,15 +153,17 @@ export class KavitaService {
   }
 
   async import(url: string, auth: KavitaAuth, seriesId: number) {
+    trace('import: start', { url, seriesId });
     // Idempotent: re-importing a series you already have just hands back what's there,
     // instead of creating another duplicate book.
     const existing = await this.booksService.findByKavitaSeriesId(seriesId);
-    if (existing) return existing;
+    if (existing) { trace('import: already imported, returning existing', { seriesId }); return existing; }
 
     const [seriesRes, metaRes] = await Promise.all([
       fetch(`${url}/api/series/${seriesId}`,                     { headers: { Authorization: `Bearer ${auth.jwt}` }, signal: AbortSignal.timeout(10_000) }),
       fetch(`${url}/api/series/metadata?seriesId=${seriesId}`,   { headers: { Authorization: `Bearer ${auth.jwt}` }, signal: AbortSignal.timeout(10_000) })
     ]);
+    trace('import: series+metadata fetched', { seriesStatus: seriesRes.status, metaStatus: metaRes.status });
     if (!seriesRes.ok) throw new BadGatewayException('Could not fetch series from Kavita');
 
     const seriesJson = await seriesRes.json();
@@ -182,6 +194,7 @@ export class KavitaService {
       headers: { Authorization: `Bearer ${auth.jwt}` },
       signal: AbortSignal.timeout(10_000)
     });
+    trace('import: volumes fetched', { status: volRes.status });
     if (!volRes.ok) throw new BadGatewayException('Could not fetch volumes from Kavita');
 
     const volJson = await volRes.json();
@@ -198,15 +211,18 @@ export class KavitaService {
     const totalChapters = volumes.reduce((n, v) => n + (v.chapters?.length ?? 0), 0);
     const partialImport = totalChapters > 1;
 
+    trace('import: downloading epub', { chapterId });
     const dlRes = await fetch(
       `${url}/api/download/chapter?chapterId=${chapterId}`,
       { headers: { Authorization: `Bearer ${auth.jwt}` }, signal: AbortSignal.timeout(120_000) }
-    ).catch(() => { throw new BadGatewayException('Epub download from Kavita failed'); });
+    ).catch((err) => { trace('import: download network error', { err: String(err) }); throw new BadGatewayException('Epub download from Kavita failed'); });
 
+    trace('import: download response', { status: dlRes.status, contentLength: dlRes.headers.get('content-length') });
     if (!dlRes.ok) throw new BadGatewayException(`Kavita download failed: ${dlRes.status}`);
 
     const contentType = dlRes.headers.get('content-type') ?? '';
     const epubBuffer = Buffer.from(await dlRes.arrayBuffer());
+    trace('import: epub buffered', { bytes: epubBuffer.length, contentType });
 
     if (!epubBuffer.slice(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) {
       throw new BadGatewayException(
@@ -229,11 +245,14 @@ export class KavitaService {
       coverUrl:       coverUrl ?? null,
       kavitaSeriesId: seriesId,
     } as Parameters<typeof this.booksService.create>[0]);
+    trace('import: book record created', { bookId: book.id });
 
     const uploadDir = resolveConfiguredPath(process.env.UPLOAD_DIR ?? 'uploads');
     const epubPath  = `epubs/${book.id}.epub`;
     await writeFile(join(uploadDir, epubPath), epubBuffer);
+    trace('import: epub written to disk', { epubPath });
     const attached = await this.booksService.attachEpub(book.id, epubPath, epubBuffer.length);
+    trace('import: complete', { bookId: book.id, partialImport });
     return { ...attached, partialImport };
   }
 }

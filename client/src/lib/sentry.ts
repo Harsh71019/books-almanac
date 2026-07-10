@@ -18,3 +18,14 @@ export function captureDebug(message: string, extra?: Record<string, unknown>) {
   if (!dsn) return;
   Sentry.captureMessage(message, { level: 'info', extra });
 }
+
+// Real failure capture for mutation/query onError handlers — TanStack Query
+// catches errors into mutation.error state, so they never become unhandled
+// promise rejections and Sentry's automatic GlobalHandlers integration never
+// sees them without this being called explicitly. Never pass credentials
+// (passwords, tokens) in `extra` — Glitchtip is self-hosted but still not a
+// place for secrets.
+export function captureError(error: unknown, extra?: Record<string, unknown>) {
+  if (!dsn) return;
+  Sentry.captureException(error, { extra });
+}

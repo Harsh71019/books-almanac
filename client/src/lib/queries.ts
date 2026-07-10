@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { api } from './api';
+import { captureError } from './sentry';
 import type {
   Book, BookListResponse, BookQuery, CreateBookPayload, UpdateBookPayload,
   MetaCandidate, Overview, YearStats, Knowledge,
@@ -33,7 +34,8 @@ export function useCreateBook() {
       qc.setQueryData(['book', book.id], book);
       qc.invalidateQueries({ queryKey: ['books'] });
       qc.invalidateQueries({ queryKey: ['stats'] });
-    }
+    },
+    onError: (err) => captureError(err, { flow: 'create-book' })
   });
 }
 
@@ -46,7 +48,8 @@ export function useUpdateBook() {
       qc.setQueryData(['book', book.id], book);
       qc.invalidateQueries({ queryKey: ['books'] });
       qc.invalidateQueries({ queryKey: ['stats'] });
-    }
+    },
+    onError: (err, { id }) => captureError(err, { flow: 'update-book', bookId: id })
   });
 }
 
@@ -57,7 +60,8 @@ export function useDeleteBook() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['books'] });
       qc.invalidateQueries({ queryKey: ['stats'] });
-    }
+    },
+    onError: (err, id) => captureError(err, { flow: 'delete-book', bookId: id })
   });
 }
 
@@ -77,9 +81,7 @@ export function useSaveEpubProgress() {
       // feeds Overview's status counts — same broad ['stats'] as book mutations.
       qc.invalidateQueries({ queryKey: ['stats'] });
     },
-    onError: (err) => {
-      console.error('[reader] epub-progress FAILED ✗', err);
-    }
+    onError: (err, { id }) => captureError(err, { flow: 'epub-progress', bookId: id })
   });
 }
 
@@ -99,9 +101,7 @@ export function useLogEpubSession() {
       // never matched, so it silently never refreshed after a session was logged.
       qc.invalidateQueries({ queryKey: ['stats'] });
     },
-    onError: (err) => {
-      console.error('[reader] epub-session FAILED ✗', err);
-    }
+    onError: (err, { id }) => captureError(err, { flow: 'epub-session', bookId: id })
   });
 }
 
@@ -111,13 +111,15 @@ export function useUploadCover() {
       const form = new FormData();
       form.append('file', file);
       return api.postForm<{ url: string }>('/uploads/cover', form);
-    }
+    },
+    onError: (err, file) => captureError(err, { flow: 'upload-cover', fileSize: file.size, fileType: file.type })
   });
 }
 
 export function useCacheCover() {
   return useMutation({
-    mutationFn: (url: string) => api.post<{ url: string }>('/uploads/cache-cover', { url })
+    mutationFn: (url: string) => api.post<{ url: string }>('/uploads/cache-cover', { url }),
+    onError: (err) => captureError(err, { flow: 'cache-cover' })
   });
 }
 
@@ -204,7 +206,8 @@ export function useCreateSession() {
       // page (useYearStats/useAllTimeStats) lives under ['stats','all'|'year',...]
       // and was silently never refreshed by session changes otherwise.
       qc.invalidateQueries({ queryKey: ['stats'] });
-    }
+    },
+    onError: (err) => captureError(err, { flow: 'create-session' })
   });
 }
 
@@ -216,7 +219,8 @@ export function useUpdateSession() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sessions'] });
       qc.invalidateQueries({ queryKey: ['stats'] });
-    }
+    },
+    onError: (err, { id }) => captureError(err, { flow: 'update-session', sessionId: id })
   });
 }
 
@@ -227,7 +231,8 @@ export function useDeleteSession() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sessions'] });
       qc.invalidateQueries({ queryKey: ['stats'] });
-    }
+    },
+    onError: (err, id) => captureError(err, { flow: 'delete-session', sessionId: id })
   });
 }
 
@@ -258,7 +263,12 @@ export interface KavitaLibrary {
 export function useKavitaBrowse(url: string, username: string, password: string, enabled: boolean) {
   return useQuery<KavitaSeries[]>({
     queryKey: ['kavita', 'browse', url, username],
-    queryFn:  () => api.post('/kavita/browse', { url, username, password }),
+    queryFn:  () => api.post<KavitaSeries[]>('/kavita/browse', { url, username, password }).catch((err) => {
+      // Never include password/username in captured context — only the
+      // Kavita server URL, which is needed to tell devices/networks apart.
+      captureError(err, { flow: 'kavita-browse', kavitaUrl: url });
+      throw err;
+    }),
     enabled:  enabled && !!url && !!username && !!password,
     staleTime: 60_000,
     retry: false,
@@ -268,7 +278,10 @@ export function useKavitaBrowse(url: string, username: string, password: string,
 export function useKavitaLibraries(url: string, username: string, password: string, enabled: boolean) {
   return useQuery<KavitaLibrary[]>({
     queryKey: ['kavita', 'libraries', url, username],
-    queryFn:  () => api.post('/kavita/libraries', { url, username, password }),
+    queryFn:  () => api.post<KavitaLibrary[]>('/kavita/libraries', { url, username, password }).catch((err) => {
+      captureError(err, { flow: 'kavita-libraries', kavitaUrl: url });
+      throw err;
+    }),
     enabled:  enabled && !!url && !!username && !!password,
     staleTime: 60_000,
     retry: false,
@@ -282,6 +295,9 @@ export function useKavitaImport() {
       api.post<Book & { partialImport?: boolean }>('/kavita/import', payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['books'] });
+    },
+    onError: (err, payload) => {
+      captureError(err, { flow: 'kavita-import', kavitaUrl: payload.url, seriesId: payload.seriesId });
     }
   });
 }
@@ -304,6 +320,7 @@ export function useUpdateSettings() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings'] });
       qc.invalidateQueries({ queryKey: ['me'] });
-    }
+    },
+    onError: (err) => captureError(err, { flow: 'update-settings' })
   });
 }
