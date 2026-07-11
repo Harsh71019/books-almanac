@@ -46,7 +46,7 @@ export function ReaderPage() {
     ? { ...settings, pageLayout: 'single' as const }
     : settings;
 
-  const { visible: chromeVisible } = useReaderChrome(fontPanelOpen || customizeOpen || tocPanelOpen || searchOpen);
+  const { visible: chromeVisible, toggle: toggleChrome } = useReaderChrome(fontPanelOpen || customizeOpen || tocPanelOpen || searchOpen);
 
   const {
     viewerRef,
@@ -63,6 +63,7 @@ export function ReaderPage() {
     goTo,
     search,
     setSwipeHandlers,
+    setTapHandler,
   } = useEpubReader({ id: id!, lastReadCfi: book?.lastReadCfi, pageCount: book?.pageCount, fontSettings: effectiveSettings, ready: !!book });
 
   const { triggerNext, triggerPrev, pageAnimStyle } = usePageTurn(prev, next, loading);
@@ -73,6 +74,13 @@ export function ReaderPage() {
   useEffect(() => {
     setSwipeHandlers({ next: triggerNext, prev: triggerPrev });
   }, [setSwipeHandlers, triggerNext, triggerPrev]);
+
+  // A plain tap (not a swipe) inside the reading area toggles the chrome —
+  // same wiring problem as swipe: only useEpubReader's iframe-document-level
+  // listener can see a touch that lands inside the epub content.
+  useEffect(() => {
+    setTapHandler(toggleChrome);
+  }, [setTapHandler, toggleChrome]);
 
   // Keyboard navigation (animated, lives here because it uses triggerNext/Prev)
   useEffect(() => {

@@ -14,6 +14,20 @@ export function useReaderChrome(locked = false) {
     }
   }, [locked]);
 
+  // Explicit tap-to-toggle (as opposed to show(), used for passive "wake"
+  // signals like mouse movement) — standard reader-app convention: tap once
+  // to reveal controls, tap again to dismiss them.
+  const toggle = useCallback(() => {
+    setVisible((v) => {
+      const next = !v;
+      clearTimeout(timer.current);
+      if (next && !locked) {
+        timer.current = setTimeout(() => setVisible(false), HIDE_DELAY_MS);
+      }
+      return next;
+    });
+  }, [locked]);
+
   // When a panel opens (locked=true), cancel the hide timer and stay visible
   useEffect(() => {
     if (locked) {
@@ -43,5 +57,5 @@ export function useReaderChrome(locked = false) {
     };
   }, [show]);
 
-  return { visible, show };
+  return { visible, show, toggle };
 }

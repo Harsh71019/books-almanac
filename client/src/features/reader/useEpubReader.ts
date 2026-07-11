@@ -67,6 +67,16 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
     swipePrevRef.current = handlers.prev;
   }, []);
 
+  // Same problem, different symptom: useReaderChrome's auto-show listens for
+  // touchstart on window (host document), which can never see a touch that
+  // lands inside the epub iframe — so tapping the reading area itself never
+  // revealed the top/bottom bar chrome. Routed through the same tap/swipe
+  // detection as page-turning, below.
+  const tapRef = useRef<(() => void) | null>(null);
+  const setTapHandler = useCallback((handler: () => void) => {
+    tapRef.current = handler;
+  }, []);
+
   const saveProgress = useSaveEpubProgress();
   const logSession    = useLogEpubSession();
 
@@ -201,6 +211,7 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
       touchStartX = null;
       if (deltaX > SWIPE_THRESHOLD_PX) (swipePrevRef.current ?? (() => rendition.prev()))();
       else if (deltaX < -SWIPE_THRESHOLD_PX) (swipeNextRef.current ?? (() => rendition.next()))();
+      else tapRef.current?.();
     };
 
     const scanIframes = () => {
@@ -411,5 +422,6 @@ export function useEpubReader({ id, lastReadCfi, pageCount, fontSettings, ready 
     goTo,
     search,
     setSwipeHandlers,
+    setTapHandler,
   };
 }
